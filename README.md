@@ -3,7 +3,7 @@ Flamethrower
 
 A DNS performance and functional testing utility.
 
-2017-2019 © NS1
+2017-2019 © NSONE, Inc.
 
 License
 -------
