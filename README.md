@@ -15,7 +15,7 @@ Overview
 
 Flamethrower is a small, fast, configurable tool for functional testing, benchmarking, and stress testing DNS servers and networks. It supports IPv4, IPv6, UDP and TCP, and has a modular system for generating queries used in the tests.
 
-It was built as an alternative to dnsperf (https://nominum.com/measurement-tools/), and many of the command line options are compatible. 
+It was built as an alternative to dnsperf (https://nominum.com/measurement-tools/), and many of the command line options are compatible.
 
 Dependencies
 ------------

@@ -1,4 +1,4 @@
-// Copyright 2017 NSONE, Inc
+// Copyright 2019 NSONE, Inc
 
 #include <ctime>
 #include <iostream>
