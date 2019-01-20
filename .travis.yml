@@ -1,0 +1,20 @@
+---
+os: linux
+dist: xenial
+language: c
+
+addons:
+  apt:
+    packages:
+      - cmake
+      - libssl-dev
+
+before_script:
+  - sh ci/install-libuv.sh
+  - sh ci/install-ldns.sh
+
+script:
+  - mkdir build
+  - cd build
+  - cmake ..
+  - make
