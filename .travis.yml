@@ -1,17 +1,28 @@
 ---
-os: linux
-dist: xenial
 language: c
+dist: xenial
 
-addons:
-  apt:
-    packages:
-      - cmake
-      - libssl-dev
+matrix:
+  include:
+    - os: linux
+      addons:
+        apt:
+          packages:
+            - cmake
+            - libssl-dev
+    - os: osx
+      addons:
+        homebrew:
+          update: true
+          packages:
+            - cmake
+            - libuv
+            - ldns
+            - openssl
 
 before_script:
-  - sh ci/install-libuv.sh
-  - sh ci/install-ldns.sh
+  - if [ "${TRAVIS_OS_NAME}" = linux ]; then sh ci/install-libuv.sh; fi
+  - if [ "${TRAVIS_OS_NAME}" = linux ]; then sh ci/install-ldns.sh; fi
 
 script:
   - mkdir build && cd build && cmake ..
