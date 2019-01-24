@@ -44,7 +44,7 @@ add_compile_options(-Wall)
 find_package(PkgConfig)
 
 pkg_check_modules(LIBLDNS REQUIRED libldns)
-pkg_check_modules(LIBUV REQUIRED libuv>=1.23)
+pkg_check_modules(LIBUV REQUIRED libuv)
 
 # ::-------------------------------------------------------------------------:: 
 # BUILD TARGETS
