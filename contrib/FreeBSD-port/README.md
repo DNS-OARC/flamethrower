@@ -8,7 +8,9 @@
 * make && make install
 
 
-> Author: Pablo Carboni
-> E-mail: pcarboni@gmail.com / Twitter: @pcarboni / Mastodon: @pcarboni@bsd.network
+```
+Author: Pablo Carboni
+E-mail: pcarboni@gmail.com / Twitter: @pcarboni / Mastodon: @pcarboni@bsd.network
+```
 
 > Last update: Feb 1th, 2019
