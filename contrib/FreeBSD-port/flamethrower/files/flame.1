@@ -1,0 +1,253 @@
+.\" Copyright (c) 2017-2019 NSONE, Inc.
+.\"
+.\" (Unofficial) man page written by Pablo Carboni <pcarboni@gmail.com>
+.\"
+.\" All rights reserved.
+.\"
+.Dd January 27, 2019
+.Dt FLAMETHROWER 1
+.Os NSONE
+.Sh NAME
+.Nm flame
+.Nd "DNS performance and functional testing utility"
+.Sh SYNOPSIS
+.Nm
+.Op Fl q Ar QCOUNT
+.Op Fl c Ar TCOUNT
+.Op Fl p Ar PORT
+.Op Fl d Ar DELAY_MS
+.Op Fl r Ar RECORD
+.Op Fl T Ar QTYPE
+.Op Fl o Ar FILE
+.Op Fl l Ar LIMIT_SECS
+.Op Fl t Ar TIMEOUT
+.Op Fl F Ar FAMILY
+.Op Fl f Ar FILE
+.Op Fl n Ar LOOP
+.Op Fl P Ar PROTOCOL
+.Op Fl Q Ar QPS
+.Op Fl g Ar GENERATOR
+.Op Fl v Ar VERBOSITY
+.Op Fl R
+.Op Fl Fl class Ar CLASS
+.Op Fl Fl qps-flow Ar SPEC
+.Op Fl Fl dnssec
+.Ar TARGET
+.Op Cm Ar GENOPTS ...
+.Nm
+.Op Fl h | Fl Fl help
+.Nm
+.Fl Fl version
+.Sh DESCRIPTION
+Flamethrower is a small, fast, configurable tool for functional testing,
+benchmarking, and stress testing DNS servers and networks.
+.Pp
+It supports IPv4, IPv6, UDP and TCP, and has a modular system for
+generating queries used in the tests.
+.Pp
+It was built as an alternative to
+.Sy dnsperf
+(
+.Lk https://nominum.com/measurement-tools/
+), and many of the command line options are compatible. 
+.Pp
+The following options are available:
+.Bl -tag -width
+.It Fl h , Fl Fl help
+Show this screen.
+.It Fl Fl version
+Show version.
+.It Fl Fl class Ar CLASS
+Default query
+.Ar CLASS
+, defaults to
+.Cm IN .
+May also be
+.Cm CH
+[default: IN]
+.It Fl c Ar TCOUNT
+Number of concurrent traffic generators per process [default: 10]
+.It Fl d Ar DELAY_MS
+ms delay between each traffic generator's query [default: 1]
+.It Fl q Ar QCOUNT
+Number of queries to send every
+.Ar DELAY_MS [default: 10]
+.It Fl l Ar LIMIT_SECS
+Limit traffic generation to
+.Ar N
+seconds,
+.Cm 0
+is unlimited [default: 0]
+.It Fl t Ar TIMEOUT_SECS
+Query timeout in seconds [default: 3]
+.It Fl n Ar LOOP
+Loop
+.Ar LOOP
+times through record list,
+.Cm 0
+is unlimited [default: 0]
+.It Fl Q Ar QPS
+Rate limit to a maximum of
+.Ar QPS
+,
+.Cm 0
+is no limit [default: 0]
+.It Fl Fl qps-flow Ar SPEC
+Change rate limit over time, format:
+.Cm QPS,MS;QPS,MS;...
+.It Fl r Ar RECORD
+The base record to use as the
+.Sy DNS
+query for generators [default: test.com]
+.It Fl T Ar QTYPE
+The query type to use for generators [default: A]
+.It Fl f Ar FILE
+Read records from
+.Ar FILE
+, one per row,
+.Sy QNAME TYPE
+.It Fl p Ar PORT
+Which port to flame [default: 53]
+.It Fl F Ar FAMILY
+Internet family (
+.Cm inet/inet6
+) [default:
+.Cm inet
+]
+.It Fl P Ar PROTOCOL
+Protocol to use (
+.Cm udp/tcp
+) [default:
+.Cm udp
+]
+.It Fl g Ar GENERATOR
+Generate queries with the given generator [default:
+.Cm static
+]
+.It Fl o Ar FILE
+Metrics output file, JSON format.
+.It Fl v Ar VERBOSITY
+How verbose output should be, 0 is silent [default: 1]
+.It Fl R
+Randomize the query list before sending [default: false]
+.It Fl Fl dnssec
+Set
+.Sy DO
+flag in
+.Sy EDNS
+\&.
+.El
+.Pp
+.Ss Generators
+.Bl -tag -width
+Using generator modules you can craft the type of packet or query which is sent.
+.Pp
+Specify generator arguments by passing in
+.Cm KEY Ns = Ns Cm VAL
+pairs, where the
+.Cm KEY
+is a specific configuration key interpreted by the generator as specified
+below in caps (although keys are not case sensitive).
+.Pp
+.It static
+The basic static generator, used by default, has a single qname/qtype which you can set with
+.Fl r
+and
+.Fl T Ns \&. There are no KEYs for this generator.
+.It file
+The basic file generator, used with
+.Fl f
+, reads in one qname/qtype pair per line in the file. There are no KEYs for this generator.
+.It numberqname
+Synthesize qnames with random numbers, between [
+.Cm LOW
+,
+.Cm HIGH
+], at zone specified with
+.Fl r
+.Pp
+.It LOW
+An integer representing the lowest number queried, default 0
+.It HIGH
+An integer representing the highest number queried, default 100000
+.It randompkt
+.Pp
+Generate COUNT randomly generated packets, of random size [1,SIZE]
+.Pp
+.It COUNT
+.Op count=COUNT
+.Op SIZE
+.Pp
+An integer representing the number of packets to generate, default 1000
+.It SIZE
+.Pp
+An integer representing the maximum size of the random packet, default 600
+.Pp
+.It randomqname
+.Op count=COUNT
+.Op SIZE
+.Pp
+Generate COUNT queries of randomly generated QNAME's (including nulls) of random length [1,SIZE], at base zone specified with
+.Fl r
+.Pp
+.It COUNT
+An integer representing the number of queries to generate, default 1000
+.It SIZE
+An integer representing the maximum length of the random qname, default 255
+.Pp
+.It randomlabel
+.Op count=COUNT
+.Op lblsize=LBLSIZE
+.Op lblcount=LBLCOUNT 
+.Pp
+Generate COUNT queries in base zone, each with LBLCOUNT random labels of size [1,LBLSIZE]
+.Pp
+Use
+.Fl r
+to set the base zone to create the labels in. Queries will have a random QTYPE from the most popular set.
+.Pp
+.It COUNT
+An integer representing the number of queries to generate, default 1000
+.It LBLSIZE
+An integer representing the maximum length of a single label, default 10
+.It LBLCOUNT
+An integer representing the maximum number of labels in the qname, default 5
+.Pp
+.El
+.Ss Generator Example:
+.Dl $ flame target.test.com -T ANY -g randomlabel lblsize=10 lblcount=4 count=1000
+.Pp
+.Sh EXAMPLES
+Flame localhost port 53, UDP, maximum speed:
+.Pp
+.Dl $ flame localhost
+.Pp
+Flame target, port 5300, TCP:
+.Pp
+.Dl $ flame -p 5300 -P tcp target.test.com
+.Pp
+Flame target with random labels:
+.Pp
+.Dl $ flame target.test.com -g randomlabel lblsize=10 lblcount=4 count=1000
+.Pp
+.Sh SEE ALSO
+.Xr dnsperf 1 ,
+.Xr resperf 1
+.Sh HISTORY
+Initial release
+.Pp
+.Sh AUTHORS
+.Pp
+.An Shannon Weyrick (Twitter: @pheellix)
+.An Jan Vcelak (Twitter: @fcelda)
+.Pp
+This unofficial man page implemented with
+.Xr mdoc 7
+was written by
+.An Pablo Carboni Aq pcarboni@gmail.com .
+.Sh BUGS
+Please report them to Flamethrower's Github project page
+.Lk https://github.com/DNS-OARC/flamethrower
+.Pp
+Please, also note that this man page needs to be polished.
+.Pp
