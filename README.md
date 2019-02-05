@@ -1,4 +1,4 @@
-Flamethrower
+Flamethrower [![Build Status](https://travis-ci.org/DNS-OARC/flamethrower.svg?branch=master)](https://travis-ci.org/DNS-OARC/flamethrower)
 ============
 
 A DNS performance and functional testing utility.
