@@ -1,7 +1,8 @@
 # $FreeBSD$
 
 PORTNAME=	flamethrower
-PORTVERSION=	0.9
+DISTVERSIONPREFIX=	v
+DISTVERSION=	0.9
 CATEGORIES=	dns net benchmarks ipv6
 
 MAINTAINER=	pcarboni@gmail.com
@@ -32,7 +33,6 @@ INSTALL_WRKSRC=	${WRKSRC}/build
 
 USE_GITHUB=	yes
 GH_ACCOUNT=	DNS-OARC
-GH_TAGNAME=	73b9815
 
 PLIST_FILES=	bin/flame man/man1/flame.1.gz
 
