@@ -57,6 +57,8 @@ add_library(flamecore
         flame/query.h
         flame/trafgen.cpp
         flame/trafgen.h
+        flame/tcpsession.cpp
+        flame/tcpsession.h
         flame/utils.cpp flame/utils.h)
 
 target_include_directories(flamecore

@@ -104,6 +104,21 @@ void TrafGen::start_tcp_session()
 
     _metrics->trafgen_id(_tcp_handle->sock().port);
 
+    auto session = std::make_shared<TCPSession>(
+        _tcp_handle,
+        // malformed data callback
+        [this]() {
+            _metrics->net_error();
+            handle_timeouts(true);
+            _tcp_handle->close();
+        },
+        // got DNS message callback
+        [this](std::unique_ptr<const char[]> data, size_t size) {
+            process_wire(data.get(), size);
+        });
+    // user data on the handle is our TCP session
+    _tcp_handle->data(session);
+
     /** SOCKET CALLBACKS **/
 
     // SOCKET: local socket was closed, cleanup resources and possibly restart another connection
@@ -132,45 +147,31 @@ void TrafGen::start_tcp_session()
 
     // INCOMING: remote peer closed connection, EOF
     _tcp_handle->on<uvw::EndEvent>([this](uvw::EndEvent &event, uvw::TcpHandle &h) {
-        _tcp_handle->shutdown();
+        auto session = std::static_pointer_cast<TCPSession>(_tcp_handle->data());
+        session->on_end_event();
     });
 
     // OUTGOING: we've finished writing all our data and are shutting down
     _tcp_handle->on<uvw::ShutdownEvent>([this](uvw::ShutdownEvent &event, uvw::TcpHandle &h) {
-        _tcp_handle->close();
+        auto session = std::static_pointer_cast<TCPSession>(_tcp_handle->data());
+        session->on_shutdown_event();
     });
 
     // INCOMING: remote peer sends data, pass to session
     _tcp_handle->on<uvw::DataEvent>([this](uvw::DataEvent &event, uvw::TcpHandle &h) {
         auto session = std::static_pointer_cast<TCPSession>(_tcp_handle->data());
-        session->received(event.data.get(), event.length);
+        session->on_data_event(event.data.get(), event.length);
     });
 
     // OUTGOING: write operation has finished
     _tcp_handle->on<uvw::WriteEvent>([this](uvw::WriteEvent &event, uvw::TcpHandle &h) {
-        start_wait_timer_for_tcp_finish();
+        if (!_finish_session_timer)
+            start_wait_timer_for_tcp_finish();
     });
 
     // SOCKET: on connect
-    _tcp_handle->on<uvw::ConnectEvent>([this](uvw::ConnectEvent &event, uvw::TcpHandle &h) {
+    _tcp_handle->on<uvw::ConnectEvent>([this,session](uvw::ConnectEvent &event, uvw::TcpHandle &h) {
         _metrics->tcp_connection();
-
-        auto session = std::make_shared<TCPSession>();
-        // user data on the handle is our TCP session
-        _tcp_handle->data(session);
-
-        /** SESSION CALLBACKS **/
-        // define session callback for malformed data received
-        session->on_error([this]() {
-            _metrics->net_error();
-            handle_timeouts(true);
-            _tcp_handle->close();
-        });
-
-        // define session callback for complete DNS message received
-        session->on_query([this](std::unique_ptr<const char[]> data, size_t size) {
-            process_wire(data.get(), size);
-        });
 
         /** SEND DATA **/
         uint16_t id{0};
@@ -200,7 +201,7 @@ void TrafGen::start_tcp_session()
         auto qt = _qgen->next_tcp(id_list);
 
         // async send the batch. fires WriteEvent when finished sending.
-        _tcp_handle->write(std::move(std::get<0>(qt)), std::get<1>(qt));
+        session->write(std::move(std::get<0>(qt)), std::get<1>(qt));
 
         _metrics->send(std::get<1>(qt), id_list.size(), _in_flight.size());
 

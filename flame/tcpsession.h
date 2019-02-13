@@ -1,69 +1,33 @@
 #pragma once
 
-#include <cstdint>
-#include <cstring>
 #include <functional>
 #include <memory>
-#include <utility>
 
-class TCPSession
-{
+#include <uvw.hpp>
+
+class TCPSession {
 public:
-    using error_cb = std::function<void()>;
-    using query_cb = std::function<void(std::unique_ptr<char[]> data, size_t size)>;
+    using malformed_data_cb = std::function<void()>;
+    using got_dns_msg_cb = std::function<void(std::unique_ptr<char[]> data, size_t size)>;
 
-    void received(const char data[], size_t len)
-    {
-        buffer.append(data, len);
+    TCPSession(std::shared_ptr<uvw::TcpHandle> handle,
+               malformed_data_cb malformed_data_handler,
+               got_dns_msg_cb got_dns_msg_handler);
+    virtual ~TCPSession();
 
-        while (try_yield_message()) {
-        }
-    }
+    virtual void on_data_event(const char data[], size_t len);
+    virtual void on_end_event();
+    virtual void on_shutdown_event();
 
-    void on_error(error_cb handler)
-    {
-        error = std::move(handler);
-    }
+    virtual void write(std::unique_ptr<char[]> data, size_t len);
 
-    void on_query(query_cb handler)
-    {
-        query = std::move(handler);
-    }
+protected:
+    virtual void receive_data(const char data[], size_t len);
+    virtual void send_data(std::unique_ptr<char[]> data, size_t len);
 
 private:
-    bool try_yield_message()
-    {
-        const size_t MIN_DNS_QUERY_SIZE = 17;
-        const size_t MAX_DNS_QUERY_SIZE = 512;
-
-        std::uint16_t size = 0;
-
-        if (buffer.size() < sizeof(size)) {
-            return false;
-        }
-
-        // size is in network byte order.
-        size = static_cast<unsigned char>(buffer[1]) |
-               static_cast<unsigned char>(buffer[0]) << 8;
-
-        if (size < MIN_DNS_QUERY_SIZE || size > MAX_DNS_QUERY_SIZE) {
-            error();
-            return false;
-        }
-
-        if (buffer.size() >= sizeof(size) + size) {
-            auto data = std::make_unique<char[]>(size);
-            memcpy(data.get(), buffer.data() + sizeof(size), size);
-            buffer.erase(0, sizeof(size) + size);
-
-            query(std::move(data), size);
-            return true;
-        }
-
-        return false;
-    }
-
-    std::string buffer;
-    error_cb error;
-    query_cb query;
+    std::string _buffer;
+    std::shared_ptr<uvw::TcpHandle> _handle;
+    malformed_data_cb _malformed_data;
+    got_dns_msg_cb _got_dns_msg;
 };
