@@ -14,7 +14,7 @@ public:
     TCPSession(std::shared_ptr<uvw::TcpHandle> handle,
                malformed_data_cb malformed_data_handler,
                got_dns_msg_cb got_dns_msg_handler,
-               connection_ready_cb connection_ready_hander);
+               connection_ready_cb connection_ready_handler);
     virtual ~TCPSession();
 
     virtual bool setup();

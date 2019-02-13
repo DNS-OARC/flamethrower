@@ -7,7 +7,7 @@
 #include <string>
 
 #include "trafgen.h"
-#include "tcpsession.h"
+#include "tcptlssession.h"
 
 #include <ldns/rbtree.h>
 
@@ -93,6 +93,7 @@ void TrafGen::start_tcp_session()
 {
 
     assert(_tcp_handle.get() == 0);
+    assert(_tcp_session.get() == 0);
     assert(_finish_session_timer.get() == 0);
     _tcp_handle = _loop->resource<uvw::TcpHandle>(_traf_config->family);
 
@@ -147,14 +148,14 @@ void TrafGen::start_tcp_session()
         _metrics->send(std::get<1>(qt), id_list.size(), _in_flight.size());
     };
 
-    _tcp_session = std::make_shared<TCPSession>(_tcp_handle, malformed_data, got_dns_message, connection_ready);
+    // For now, treat a TLS handshake failure as malformed data
+    _tcp_session = (_traf_config->protocol == Protocol::TCPTLS)
+        ? std::make_shared<TCPTLSSession>(_tcp_handle, malformed_data, got_dns_message, connection_ready, malformed_data)
+        : std::make_shared<TCPSession>(_tcp_handle, malformed_data, got_dns_message, connection_ready);
 
     if (!_tcp_session->setup()) {
         return;
     }
-
-    // user data on the handle is our TCP session
-    _tcp_handle->data(_tcp_session);
 
     /** SOCKET CALLBACKS **/
 
@@ -168,6 +169,7 @@ void TrafGen::start_tcp_session()
         if (_tcp_handle.get()) {
             _tcp_handle->stop();
         }
+        _tcp_session.reset();
         _tcp_handle.reset();
         _finish_session_timer.reset();
         handle_timeouts(true);
