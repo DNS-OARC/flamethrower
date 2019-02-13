@@ -6,15 +6,28 @@
 
 TCPSession::TCPSession(std::shared_ptr<uvw::TcpHandle> handle,
                        malformed_data_cb malformed_data_handler,
-                       got_dns_msg_cb got_dns_msg_handler)
+                       got_dns_msg_cb got_dns_msg_handler,
+                       connection_ready_cb connection_ready_handler)
     : _handle{handle},
       _malformed_data{std::move(malformed_data_handler)},
-      _got_dns_msg{std::move(got_dns_msg_handler)}
+      _got_dns_msg{std::move(got_dns_msg_handler)},
+      _connection_ready{std::move(connection_ready_handler)}
 {
 }
 
 TCPSession::~TCPSession()
 {
+}
+
+// do any pre-connection setup, return true if all OK.
+bool TCPSession::setup()
+{
+    return true;
+}
+
+void TCPSession::on_connect_event()
+{
+    _connection_ready();
 }
 
 void TCPSession::on_data_event(const char data[], size_t len)

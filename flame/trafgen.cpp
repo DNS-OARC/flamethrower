@@ -104,20 +104,57 @@ void TrafGen::start_tcp_session()
 
     _metrics->trafgen_id(_tcp_handle->sock().port);
 
-    auto session = std::make_shared<TCPSession>(
-        _tcp_handle,
-        // malformed data callback
-        [this]() {
-            _metrics->net_error();
-            handle_timeouts(true);
+    auto malformed_data = [this]() {
+        _metrics->net_error();
+        handle_timeouts(true);
+        _tcp_handle->close();
+    };
+    auto got_dns_message = [this](std::unique_ptr<const char[]> data,
+                                  size_t size) {
+        process_wire(data.get(), size);
+    };
+    auto connection_ready = [this]() {
+        /** SEND DATA **/
+        uint16_t id{0};
+        std::vector<uint16_t> id_list;
+        for (int i = 0; i < _traf_config->batch_count; i++) {
+            if (_free_id_list.empty()) {
+                // out of ids, have to limit
+                break;
+            }
+            if (_rate_limit && !_rate_limit->consume(1))
+                break;
+            id = _free_id_list.back();
+            _free_id_list.pop_back();
+            assert(_in_flight.find(id) == _in_flight.end());
+            id_list.push_back(id);
+            // might be better to do this after write (in WriteEvent) but it needs to be available
+            // by the time DataEvent fires, and we don't want a race there
+            _in_flight[id].send_time = std::chrono::high_resolution_clock::now();
+        }
+
+        if (id_list.size() == 0) {
+            // didn't send anything, probably due to rate limit. close.
             _tcp_handle->close();
-        },
-        // got DNS message callback
-        [this](std::unique_ptr<const char[]> data, size_t size) {
-            process_wire(data.get(), size);
-        });
+            return;
+        }
+
+        auto qt = _qgen->next_tcp(id_list);
+
+        // async send the batch. fires WriteEvent when finished sending.
+        _tcp_session->write(std::move(std::get<0>(qt)), std::get<1>(qt));
+
+        _metrics->send(std::get<1>(qt), id_list.size(), _in_flight.size());
+    };
+
+    _tcp_session = std::make_shared<TCPSession>(_tcp_handle, malformed_data, got_dns_message, connection_ready);
+
+    if (!_tcp_session->setup()) {
+        return;
+    }
+
     // user data on the handle is our TCP session
-    _tcp_handle->data(session);
+    _tcp_handle->data(_tcp_session);
 
     /** SOCKET CALLBACKS **/
 
@@ -147,20 +184,17 @@ void TrafGen::start_tcp_session()
 
     // INCOMING: remote peer closed connection, EOF
     _tcp_handle->on<uvw::EndEvent>([this](uvw::EndEvent &event, uvw::TcpHandle &h) {
-        auto session = std::static_pointer_cast<TCPSession>(_tcp_handle->data());
-        session->on_end_event();
+        _tcp_session->on_end_event();
     });
 
     // OUTGOING: we've finished writing all our data and are shutting down
     _tcp_handle->on<uvw::ShutdownEvent>([this](uvw::ShutdownEvent &event, uvw::TcpHandle &h) {
-        auto session = std::static_pointer_cast<TCPSession>(_tcp_handle->data());
-        session->on_shutdown_event();
+        _tcp_session->on_shutdown_event();
     });
 
     // INCOMING: remote peer sends data, pass to session
     _tcp_handle->on<uvw::DataEvent>([this](uvw::DataEvent &event, uvw::TcpHandle &h) {
-        auto session = std::static_pointer_cast<TCPSession>(_tcp_handle->data());
-        session->on_data_event(event.data.get(), event.length);
+        _tcp_session->on_data_event(event.data.get(), event.length);
     });
 
     // OUTGOING: write operation has finished
@@ -170,40 +204,9 @@ void TrafGen::start_tcp_session()
     });
 
     // SOCKET: on connect
-    _tcp_handle->on<uvw::ConnectEvent>([this,session](uvw::ConnectEvent &event, uvw::TcpHandle &h) {
+    _tcp_handle->on<uvw::ConnectEvent>([this](uvw::ConnectEvent &event, uvw::TcpHandle &h) {
+        _tcp_session->on_connect_event();
         _metrics->tcp_connection();
-
-        /** SEND DATA **/
-        uint16_t id{0};
-        std::vector<uint16_t> id_list;
-        for (int i = 0; i < _traf_config->batch_count; i++) {
-            if (_free_id_list.empty()) {
-                // out of ids, have to limit
-                break;
-            }
-            if (_rate_limit && !_rate_limit->consume(1))
-                break;
-            id = _free_id_list.back();
-            _free_id_list.pop_back();
-            assert(_in_flight.find(id) == _in_flight.end());
-            id_list.push_back(id);
-            // might be better to do this after write (in WriteEvent) but it needs to be available
-            // by the time DataEvent fires, and we don't want a race there
-            _in_flight[id].send_time = std::chrono::high_resolution_clock::now();
-        }
-
-        if (id_list.size() == 0) {
-            // didn't send anything, probably due to rate limit. close.
-            _tcp_handle->close();
-            return;
-        }
-
-        auto qt = _qgen->next_tcp(id_list);
-
-        // async send the batch. fires WriteEvent when finished sending.
-        session->write(std::move(std::get<0>(qt)), std::get<1>(qt));
-
-        _metrics->send(std::get<1>(qt), id_list.size(), _in_flight.size());
 
         // start reading from incoming stream, fires DataEvent when receiving
         _tcp_handle->read();
