@@ -18,8 +18,8 @@ class MetricsMgr
     std::chrono::high_resolution_clock::time_point _start_time;
     std::chrono::high_resolution_clock::time_point _stop_time;
 
-    std::shared_ptr<Config> _config;
     std::shared_ptr<uvw::Loop> _loop;
+    std::shared_ptr<Config> _config;
 
     // aggregation and output
     std::shared_ptr<uvw::TimerHandle> _metric_period_timer;

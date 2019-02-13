@@ -8,9 +8,9 @@
 class Config
 {
 private:
-    long _rate_limit{0};
     std::string _output_file;
     int _verbosity{1};
+    long _rate_limit{0};
 
 public:
     Config(

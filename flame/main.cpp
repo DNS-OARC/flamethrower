@@ -101,7 +101,7 @@ void parse_flowspec(std::string spec, std::queue<std::pair<uint64_t, uint64_t>> 
 {
 
     std::vector<std::string> groups = split(spec, ';');
-    for (int i = 0; i < groups.size(); i++) {
+    for (unsigned i = 0; i < groups.size(); i++) {
         std::vector<std::string> nums = split(groups[i], ',');
         if (verbosity > 1) {
             std::cout << "adding QPS flow: " << nums[0] << "qps, " << nums[1] << "ms" << std::endl;
