@@ -47,7 +47,7 @@ static const char USAGE[] =
       -f FILE          Read records from FILE, one per row, QNAME TYPE
       -p PORT          Which port to flame [default: 53]
       -F FAMILY        Internet family (inet/inet6) [default: inet]
-      -P PROTOCOL      Protocol to use (udp/tcp) [default: udp]
+      -P PROTOCOL      Protocol to use (udp/tcp/tcptls) [default: udp]
       -g GENERATOR     Generate queries with the given generator [default: static]
       -o FILE          Metrics output file, JSON format.
       -v VERBOSITY     How verbose output should be, 0 is silent [default: 1]
@@ -214,8 +214,8 @@ int main(int argc, char *argv[])
     long c_count = args["-c"].asLong();
 
     Protocol proto{Protocol::UDP};
-    if (args["-P"].asString() == "tcp") {
-        proto = Protocol::TCP;
+    if (args["-P"].asString() == "tcp" || args["-P"].asString() == "tcptls") {
+        proto = (args["-P"].asString() == "tcptls") ? Protocol::TCPTLS : Protocol::TCP;
         if (!arg_exists("-d", argc, argv))
             s_delay = 1000;
         if (!arg_exists("-q", argc, argv))
@@ -225,7 +225,7 @@ int main(int argc, char *argv[])
     } else if (args["-P"].asString() == "udp") {
         proto = Protocol::UDP;
     } else {
-        std::cerr << "protocol must be 'udp' or 'tcp'" << std::endl;
+        std::cerr << "protocol must be 'udp', 'tcp' or 'tcptls'" << std::endl;
         return 1;
     }
     auto config = std::make_shared<Config>(

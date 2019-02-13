@@ -16,6 +16,7 @@
 enum class Protocol {
     UDP,
     TCP,
+    TCPTLS,
 };
 
 struct TrafGenConfig {

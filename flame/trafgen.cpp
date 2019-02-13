@@ -353,7 +353,7 @@ void TrafGen::start()
         _sender_timer->on<uvw::TimerEvent>([this](const uvw::TimerEvent &event, uvw::TimerHandle &h) {
             if (_traf_config->protocol == Protocol::UDP) {
                 udp_send();
-            } else if (_traf_config->protocol == Protocol::TCP) {
+            } else if (_traf_config->protocol == Protocol::TCP || _traf_config->protocol == Protocol::TCPTLS) {
                 start_tcp_session();
             }
         });
