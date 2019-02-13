@@ -77,6 +77,9 @@ void TCPSession::receive_data(const char data[], size_t len)
             std::memcpy(data.get(), _buffer.data() + sizeof(size), size);
             _buffer.erase(0, sizeof(size) + size);
             _got_dns_msg(std::move(data), size);
+        } else {
+            // Nope, we need more data.
+            break;
         }
     }
 }
