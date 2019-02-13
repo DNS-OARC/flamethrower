@@ -196,7 +196,7 @@ void TrafGen::start_tcp_session()
 
     // INCOMING: remote peer sends data, pass to session
     _tcp_handle->on<uvw::DataEvent>([this](uvw::DataEvent &event, uvw::TcpHandle &h) {
-        _tcp_session->on_data_event(event.data.get(), event.length);
+        _tcp_session->receive_data(event.data.get(), event.length);
     });
 
     // OUTGOING: write operation has finished

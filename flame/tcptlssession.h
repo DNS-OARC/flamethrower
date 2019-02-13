@@ -19,8 +19,8 @@ public:
     virtual bool setup();
 
     virtual void on_connect_event();
-    virtual void on_data_event(const char data[], size_t len);
 
+    virtual void receive_data(const char data[], size_t len);
     virtual void write(std::unique_ptr<char[]> data, size_t len);
 
     int gnutls_pull(void *buf, size_t len);

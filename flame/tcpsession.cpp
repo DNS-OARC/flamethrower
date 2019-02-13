@@ -30,11 +30,6 @@ void TCPSession::on_connect_event()
     _connection_ready();
 }
 
-void TCPSession::on_data_event(const char data[], size_t len)
-{
-    receive_data(data, len);
-}
-
 // remote peer closed connection, sent EOF
 void TCPSession::on_end_event()
 {
@@ -45,11 +40,6 @@ void TCPSession::on_end_event()
 void TCPSession::on_shutdown_event()
 {
     _handle->close();
-}
-
-void TCPSession::write(std::unique_ptr<char[]> data, size_t len)
-{
-    send_data(std::move(data), len);
 }
 
 // accumulate data and try to extract DNS messages
@@ -85,7 +75,7 @@ void TCPSession::receive_data(const char data[], size_t len)
 }
 
 // send data, giving data ownership to async library
-void TCPSession::send_data(std::unique_ptr<char[]> data, size_t len)
+void TCPSession::write(std::unique_ptr<char[]> data, size_t len)
 {
     _handle->write(std::move(data), len);
 }

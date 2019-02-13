@@ -20,15 +20,11 @@ public:
     virtual bool setup();
 
     virtual void on_connect_event();
-    virtual void on_data_event(const char data[], size_t len);
     virtual void on_end_event();
     virtual void on_shutdown_event();
 
-    virtual void write(std::unique_ptr<char[]> data, size_t len);
-
-protected:
     virtual void receive_data(const char data[], size_t len);
-    virtual void send_data(std::unique_ptr<char[]> data, size_t len);
+    virtual void write(std::unique_ptr<char[]> data, size_t len);
 
 private:
     std::string _buffer;

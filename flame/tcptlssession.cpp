@@ -79,7 +79,7 @@ void TCPTLSSession::on_connect_event()
     do_handshake();
 }
 
-void TCPTLSSession::on_data_event(const char data[], size_t len)
+void TCPTLSSession::receive_data(const char data[], size_t len)
 {
     _pull_buffer.append(data, len);
     if (!_handshake_done) {
@@ -136,6 +136,6 @@ int TCPTLSSession::gnutls_push(const void *buf, size_t len)
 {
     auto data = std::make_unique<char[]>(len);
     memcpy(data.get(), const_cast<char *>(reinterpret_cast<const char *>(buf)), len);
-    TCPSession::send_data(std::move(data), len);
+    TCPSession::write(std::move(data), len);
     return len;
 }
