@@ -23,6 +23,7 @@ public:
     virtual void on_end_event();
     virtual void on_shutdown_event();
 
+    virtual void close();
     virtual void receive_data(const char data[], size_t len);
     virtual void write(std::unique_ptr<char[]> data, size_t len);
 

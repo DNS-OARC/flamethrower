@@ -20,6 +20,7 @@ public:
 
     virtual void on_connect_event();
 
+    virtual void close();
     virtual void receive_data(const char data[], size_t len);
     virtual void write(std::unique_ptr<char[]> data, size_t len);
 
@@ -30,7 +31,7 @@ protected:
     void do_handshake();
 
 private:
-    bool _handshake_done;
+    enum class LinkState { HANDSHAKE, DATA, CLOSE } _tls_state;
     handshake_error_cb _handshake_error;
     std::string _pull_buffer;
 

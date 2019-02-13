@@ -247,8 +247,7 @@ void TrafGen::start_wait_timer_for_tcp_finish()
         // shut down timer and connection. TCP CloseEvent will handle restarting sends.
         _finish_session_timer->stop();
         _finish_session_timer->close();
-        _tcp_handle->stop();
-        _tcp_handle->shutdown();
+        _tcp_handle->close();
     });
     _finish_session_timer->start(uvw::TimerHandle::Time{1}, uvw::TimerHandle::Time{50});
 }

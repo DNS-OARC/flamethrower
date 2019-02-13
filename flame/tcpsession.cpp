@@ -30,16 +30,23 @@ void TCPSession::on_connect_event()
     _connection_ready();
 }
 
-// remote peer closed connection, sent EOF
+// remote peer closed connection
 void TCPSession::on_end_event()
 {
-    _handle->shutdown();
+    _handle->close();
 }
 
-// we've closed, send EOF
+// all local writes now finished
 void TCPSession::on_shutdown_event()
 {
     _handle->close();
+}
+
+// gracefully terminate the session
+void TCPSession::close()
+{
+    _handle->stop();
+    _handle->shutdown();
 }
 
 // accumulate data and try to extract DNS messages

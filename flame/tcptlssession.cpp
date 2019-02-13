@@ -22,7 +22,7 @@ TCPTLSSession::TCPTLSSession(std::shared_ptr<uvw::TcpHandle> handle,
                              TCPSession::connection_ready_cb connection_ready_handler,
                              handshake_error_cb handshake_error_handler)
     : TCPSession(handle, malformed_data_handler, got_dns_msg_handler, connection_ready_handler),
-      _handshake_done{false}, _handshake_error{handshake_error_handler}
+      _tls_state{LinkState::HANDSHAKE}, _handshake_error{handshake_error_handler}
 {
 }
 
@@ -79,12 +79,23 @@ void TCPTLSSession::on_connect_event()
     do_handshake();
 }
 
+// gracefully terminate the session
+void TCPTLSSession::close()
+{
+    _tls_state = LinkState::CLOSE;
+    gnutls_bye(_gnutls_session, GNUTLS_SHUT_WR);
+    TCPSession::close();
+}
+
 void TCPTLSSession::receive_data(const char data[], size_t len)
 {
     _pull_buffer.append(data, len);
-    if (!_handshake_done) {
+    switch(_tls_state) {
+    case LinkState::HANDSHAKE:
         do_handshake();
-    } else {
+        break;
+
+    case LinkState::DATA:
         for (;;) {
             char buf[2048];
             ssize_t len = gnutls_record_recv(_gnutls_session, buf, sizeof(buf));
@@ -94,6 +105,10 @@ void TCPTLSSession::receive_data(const char data[], size_t len)
                 break;
             }
         }
+        break;
+
+    case LinkState::CLOSE:
+        break;
     }
 }
 
@@ -109,7 +124,7 @@ void TCPTLSSession::do_handshake()
 {
     int err = gnutls_handshake(_gnutls_session);
     if (err == GNUTLS_E_SUCCESS) {
-        _handshake_done = true;
+        _tls_state = LinkState::DATA;
         TCPSession::on_connect_event();
     } else if (err < 0 && gnutls_error_is_fatal(err)) {
         std::cerr << "Handshake failed: " << gnutls_strerror(err) << std::endl;
