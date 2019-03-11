@@ -144,7 +144,7 @@ QueryGenerator::QueryTpt QueryGenerator::next_tcp(const std::vector<uint16_t> &i
     // get total len
     size_t total_len{0};
     auto r = _reqs;
-    for (auto id : id_list) {
+    for ([[maybe_unused]] auto id : id_list) {
         // include 2 byte size required in tcp dns
         total_len += 2 + _wire_buffers[r++ % _wire_buffers.size()].second;
     }

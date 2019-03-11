@@ -45,6 +45,7 @@ find_package(PkgConfig)
 
 pkg_search_module(LIBLDNS REQUIRED libldns ldns)
 pkg_check_modules(LIBUV REQUIRED libuv)
+pkg_check_modules(LIBGNUTLS REQUIRED gnutls>=3.3)
 
 # ::-------------------------------------------------------------------------:: 
 # BUILD TARGETS
@@ -57,11 +58,16 @@ add_library(flamecore
         flame/query.h
         flame/trafgen.cpp
         flame/trafgen.h
+        flame/tcpsession.cpp
+        flame/tcpsession.h
+        flame/tcptlssession.cpp
+        flame/tcptlssession.h
         flame/utils.cpp flame/utils.h)
 
 target_include_directories(flamecore
         PUBLIC ${LIBUV_INCLUDE_DIRS}
         PUBLIC ${LIBLDNS_INCLUDE_DIRS}
+        PRIVATE ${LIBGNUTLS_INCLUDE_DIRS}
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/TokenBucket"
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/docopt.cpp"
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/json"
@@ -72,6 +78,8 @@ target_link_libraries(flamecore
         PRIVATE ${LIBUV_LDFLAGS}
         PRIVATE ${LIBLDNS_LDFLAGS}
         PRIVATE ${LIBLDNS_LIBRARIES}
+        PRIVATE ${LIBGNUTLS_LDFLAGS}
+        PRIVATE ${LIBGNUTLS_LIBRARIES}
         )
 
 add_executable(flame

@@ -45,9 +45,9 @@ static const char USAGE[] =
       -r RECORD        The base record to use as the DNS query for generators [default: test.com]
       -T QTYPE         The query type to use for generators [default: A]
       -f FILE          Read records from FILE, one per row, QNAME TYPE
-      -p PORT          Which port to flame [default: 53]
+      -p PORT          Which port to flame [defaults: 53, 853 for tcptls]
       -F FAMILY        Internet family (inet/inet6) [default: inet]
-      -P PROTOCOL      Protocol to use (udp/tcp) [default: udp]
+      -P PROTOCOL      Protocol to use (udp/tcp/tcptls) [default: udp]
       -g GENERATOR     Generate queries with the given generator [default: static]
       -o FILE          Metrics output file, JSON format.
       -v VERBOSITY     How verbose output should be, 0 is silent [default: 1]
@@ -101,7 +101,7 @@ void parse_flowspec(std::string spec, std::queue<std::pair<uint64_t, uint64_t>> 
 {
 
     std::vector<std::string> groups = split(spec, ';');
-    for (int i = 0; i < groups.size(); i++) {
+    for (unsigned i = 0; i < groups.size(); i++) {
         std::vector<std::string> nums = split(groups[i], ',');
         if (verbosity > 1) {
             std::cout << "adding QPS flow: " << nums[0] << "qps, " << nums[1] << "ms" << std::endl;
@@ -172,6 +172,34 @@ int main(int argc, char *argv[])
         output_file = args["-o"].asString();
     }
 
+    // these defaults change based on protocol
+    long s_delay = args["-d"].asLong();
+    long b_count = args["-q"].asLong();
+    long c_count = args["-c"].asLong();
+
+    Protocol proto{Protocol::UDP};
+    if (args["-P"].asString() == "tcp" || args["-P"].asString() == "tcptls") {
+        proto = (args["-P"].asString() == "tcptls") ? Protocol::TCPTLS : Protocol::TCP;
+        if (!arg_exists("-d", argc, argv))
+            s_delay = 1000;
+        if (!arg_exists("-q", argc, argv))
+            b_count = 100;
+        if (!arg_exists("-c", argc, argv))
+            c_count = 30;
+    } else if (args["-P"].asString() == "udp") {
+        proto = Protocol::UDP;
+    } else {
+        std::cerr << "protocol must be 'udp', 'tcp' or 'tcptls'" << std::endl;
+        return 1;
+    }
+
+    if (!args["-p"]) {
+        if (proto == Protocol::TCPTLS)
+            args["-p"] = std::string("853");
+        else
+            args["-p"] = std::string("53");
+    }
+
     auto runtime_limit = args["-l"].asLong();
 
     auto request = loop->resource<uvw::GetAddrInfoReq>();
@@ -208,26 +236,6 @@ int main(int argc, char *argv[])
         addr = uvw::details::address<uvw::IPv6>((struct sockaddr_in6 *)node->ai_addr);
     }
 
-    // these defaults change based on protocol
-    long s_delay = args["-d"].asLong();
-    long b_count = args["-q"].asLong();
-    long c_count = args["-c"].asLong();
-
-    Protocol proto{Protocol::UDP};
-    if (args["-P"].asString() == "tcp") {
-        proto = Protocol::TCP;
-        if (!arg_exists("-d", argc, argv))
-            s_delay = 1000;
-        if (!arg_exists("-q", argc, argv))
-            b_count = 100;
-        if (!arg_exists("-c", argc, argv))
-            c_count = 30;
-    } else if (args["-P"].asString() == "udp") {
-        proto = Protocol::UDP;
-    } else {
-        std::cerr << "protocol must be 'udp' or 'tcp'" << std::endl;
-        return 1;
-    }
     auto config = std::make_shared<Config>(
         args["-v"].asLong(),
         output_file,

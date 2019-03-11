@@ -7,72 +7,12 @@
 #include <string>
 
 #include "trafgen.h"
+#include "tcptlssession.h"
 
 #include <ldns/rbtree.h>
 
 #include <ldns/host2wire.h>
 #include <ldns/wire2host.h>
-
-static const size_t MIN_DNS_QUERY_SIZE = 17;
-static const size_t MAX_DNS_QUERY_SIZE = 512;
-
-class TCPSession
-{
-public:
-    using error_cb = std::function<void()>;
-    using query_cb = std::function<void(std::unique_ptr<char[]> data, size_t size)>;
-
-    bool try_yield_message()
-    {
-        uint16_t size = 0;
-
-        if (buffer.size() < sizeof(size)) {
-            return false;
-        }
-
-        memcpy(&size, buffer.data(), sizeof(size));
-        size = ntohs(size);
-
-        if (size < MIN_DNS_QUERY_SIZE || size > MAX_DNS_QUERY_SIZE) {
-            error();
-            return false;
-        }
-
-        if (buffer.size() >= sizeof(size) + size) {
-            auto data = std::make_unique<char[]>(size);
-            memcpy(data.get(), buffer.data() + sizeof(size), size);
-            buffer.erase(0, sizeof(size) + size);
-
-            query(std::move(data), size);
-            return true;
-        }
-
-        return false;
-    }
-
-    void received(const char data[], size_t len)
-    {
-        buffer.append(data, len);
-
-        while (try_yield_message()) {
-        }
-    }
-
-    void on_error(error_cb handler)
-    {
-        error = std::move(handler);
-    }
-
-    void on_query(query_cb handler)
-    {
-        query = std::move(handler);
-    }
-
-private:
-    std::string buffer;
-    error_cb error;
-    query_cb query;
-};
 
 TrafGen::TrafGen(std::shared_ptr<uvw::Loop> l,
     std::shared_ptr<Metrics> s,
@@ -153,6 +93,7 @@ void TrafGen::start_tcp_session()
 {
 
     assert(_tcp_handle.get() == 0);
+    assert(_tcp_session.get() == 0);
     assert(_finish_session_timer.get() == 0);
     _tcp_handle = _loop->resource<uvw::TcpHandle>(_traf_config->family);
 
@@ -164,74 +105,16 @@ void TrafGen::start_tcp_session()
 
     _metrics->trafgen_id(_tcp_handle->sock().port);
 
-    /** SOCKET CALLBACKS **/
-
-    // SOCKET: local socket was closed, cleanup resources and possibly restart another connection
-    _tcp_handle->on<uvw::CloseEvent>([this](uvw::CloseEvent &event, uvw::TcpHandle &h) {
-        // if timer is still going (e.g. we got here through EndEvent), cancel it
-        if (_finish_session_timer.get()) {
-            _finish_session_timer->stop();
-            _finish_session_timer->close();
-        }
-        if (_tcp_handle.get()) {
-            _tcp_handle->stop();
-        }
-        _tcp_handle.reset();
-        _finish_session_timer.reset();
-        handle_timeouts(true);
-        if (!_stopping) {
-            start_tcp_session();
-        }
-    });
-
-    // SOCKET: socket error
-    _tcp_handle->on<uvw::ErrorEvent>([this](uvw::ErrorEvent &event, uvw::TcpHandle &h) {
+    auto malformed_data = [this]() {
         _metrics->net_error();
-        // XXX need to close?
-    });
-
-    // INCOMING: remote peer closed connection, EOF
-    _tcp_handle->on<uvw::EndEvent>([this](uvw::EndEvent &event, uvw::TcpHandle &h) {
-        _tcp_handle->shutdown();
-    });
-
-    // OUTGOING: we've finished writing all our data and are shutting down
-    _tcp_handle->on<uvw::ShutdownEvent>([this](uvw::ShutdownEvent &event, uvw::TcpHandle &h) {
+        handle_timeouts(true);
         _tcp_handle->close();
-    });
-
-    // INCOMING: remote peer sends data, pass to session
-    _tcp_handle->on<uvw::DataEvent>([this](uvw::DataEvent &event, uvw::TcpHandle &h) {
-        auto session = std::static_pointer_cast<TCPSession>(_tcp_handle->data());
-        session->received(event.data.get(), event.length);
-    });
-
-    // OUTGOING: write operation has finished
-    _tcp_handle->on<uvw::WriteEvent>([this](uvw::WriteEvent &event, uvw::TcpHandle &h) {
-        start_wait_timer_for_tcp_finish();
-    });
-
-    // SOCKET: on connect
-    _tcp_handle->on<uvw::ConnectEvent>([this](uvw::ConnectEvent &event, uvw::TcpHandle &h) {
-        _metrics->tcp_connection();
-
-        auto session = std::make_shared<TCPSession>();
-        // user data on the handle is our TCP session
-        _tcp_handle->data(session);
-
-        /** SESSION CALLBACKS **/
-        // define session callback for malformed data received
-        session->on_error([this]() {
-            _metrics->net_error();
-            handle_timeouts(true);
-            _tcp_handle->close();
-        });
-
-        // define session callback for complete DNS message received
-        session->on_query([this](std::unique_ptr<const char[]> data, size_t size) {
-            process_wire(data.get(), size);
-        });
-
+    };
+    auto got_dns_message = [this](std::unique_ptr<const char[]> data,
+                                  size_t size) {
+        process_wire(data.get(), size);
+    };
+    auto connection_ready = [this]() {
         /** SEND DATA **/
         uint16_t id{0};
         std::vector<uint16_t> id_list;
@@ -260,9 +143,72 @@ void TrafGen::start_tcp_session()
         auto qt = _qgen->next_tcp(id_list);
 
         // async send the batch. fires WriteEvent when finished sending.
-        _tcp_handle->write(std::move(std::get<0>(qt)), std::get<1>(qt));
+        _tcp_session->write(std::move(std::get<0>(qt)), std::get<1>(qt));
 
         _metrics->send(std::get<1>(qt), id_list.size(), _in_flight.size());
+    };
+
+    // For now, treat a TLS handshake failure as malformed data
+    _tcp_session = (_traf_config->protocol == Protocol::TCPTLS)
+        ? std::make_shared<TCPTLSSession>(_tcp_handle, malformed_data, got_dns_message, connection_ready, malformed_data)
+        : std::make_shared<TCPSession>(_tcp_handle, malformed_data, got_dns_message, connection_ready);
+
+    if (!_tcp_session->setup()) {
+        return;
+    }
+
+    /** SOCKET CALLBACKS **/
+
+    // SOCKET: local socket was closed, cleanup resources and possibly restart another connection
+    _tcp_handle->on<uvw::CloseEvent>([this](uvw::CloseEvent &event, uvw::TcpHandle &h) {
+        // if timer is still going (e.g. we got here through EndEvent), cancel it
+        if (_finish_session_timer.get()) {
+            _finish_session_timer->stop();
+            _finish_session_timer->close();
+        }
+        if (_tcp_handle.get()) {
+            _tcp_handle->stop();
+        }
+        _tcp_session.reset();
+        _tcp_handle.reset();
+        _finish_session_timer.reset();
+        handle_timeouts(true);
+        if (!_stopping) {
+            start_tcp_session();
+        }
+    });
+
+    // SOCKET: socket error
+    _tcp_handle->on<uvw::ErrorEvent>([this](uvw::ErrorEvent &event, uvw::TcpHandle &h) {
+        _metrics->net_error();
+        // XXX need to close?
+    });
+
+    // INCOMING: remote peer closed connection, EOF
+    _tcp_handle->on<uvw::EndEvent>([this](uvw::EndEvent &event, uvw::TcpHandle &h) {
+        _tcp_session->on_end_event();
+    });
+
+    // OUTGOING: we've finished writing all our data and are shutting down
+    _tcp_handle->on<uvw::ShutdownEvent>([this](uvw::ShutdownEvent &event, uvw::TcpHandle &h) {
+        _tcp_session->on_shutdown_event();
+    });
+
+    // INCOMING: remote peer sends data, pass to session
+    _tcp_handle->on<uvw::DataEvent>([this](uvw::DataEvent &event, uvw::TcpHandle &h) {
+        _tcp_session->receive_data(event.data.get(), event.length);
+    });
+
+    // OUTGOING: write operation has finished
+    _tcp_handle->on<uvw::WriteEvent>([this](uvw::WriteEvent &event, uvw::TcpHandle &h) {
+        if (!_finish_session_timer)
+            start_wait_timer_for_tcp_finish();
+    });
+
+    // SOCKET: on connect
+    _tcp_handle->on<uvw::ConnectEvent>([this](uvw::ConnectEvent &event, uvw::TcpHandle &h) {
+        _tcp_session->on_connect_event();
+        _metrics->tcp_connection();
 
         // start reading from incoming stream, fires DataEvent when receiving
         _tcp_handle->read();
@@ -301,8 +247,7 @@ void TrafGen::start_wait_timer_for_tcp_finish()
         // shut down timer and connection. TCP CloseEvent will handle restarting sends.
         _finish_session_timer->stop();
         _finish_session_timer->close();
-        _tcp_handle->stop();
-        _tcp_handle->shutdown();
+        _tcp_handle->close();
     });
     _finish_session_timer->start(uvw::TimerHandle::Time{1}, uvw::TimerHandle::Time{50});
 }
@@ -353,7 +298,7 @@ void TrafGen::start()
         _sender_timer->on<uvw::TimerEvent>([this](const uvw::TimerEvent &event, uvw::TimerHandle &h) {
             if (_traf_config->protocol == Protocol::UDP) {
                 udp_send();
-            } else if (_traf_config->protocol == Protocol::TCP) {
+            } else if (_traf_config->protocol == Protocol::TCP || _traf_config->protocol == Protocol::TCPTLS) {
                 start_tcp_session();
             }
         });

@@ -24,6 +24,7 @@ Dependencies
 * Linux or OSX
 * libuv >= 1.23.0
 * libldns >= 1.7.0
+* gnutls >= 3.3
 * C++ compiler supporting C++17
 
 Build
@@ -56,6 +57,11 @@ flame localhost
 Flame target, port 5300, TCP:
 ```
 flame -p 5300 -P tcp target.test.com
+```
+
+Flame target, port 443, TCPTLS:
+```
+flame -p 443 -P tcptls target.test.com
 ```
 
 Flame target with random labels:

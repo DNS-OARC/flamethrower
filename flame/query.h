@@ -33,7 +33,7 @@ public:
     using WireTpt = std::pair<uint8_t *, size_t>;
 
 protected:
-    long _loops{0};
+    unsigned long _loops{0};
     std::string _qclass;
     std::string _qname;
     std::string _qtype;
@@ -71,7 +71,7 @@ public:
 
     void set_args(const std::vector<std::string> &args);
 
-    void set_loops(long l)
+    void set_loops(unsigned long l)
     {
         _loops = l;
     }
@@ -96,7 +96,7 @@ public:
         _dnssec = d;
     }
 
-    long loops() const
+    unsigned long loops() const
     {
         return _loops;
     }

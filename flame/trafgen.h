@@ -9,6 +9,7 @@
 #include "config.h"
 #include "metrics.h"
 #include "query.h"
+#include "tcpsession.h"
 
 #include <TokenBucket.h>
 #include <uvw.hpp>
@@ -16,6 +17,7 @@
 enum class Protocol {
     UDP,
     TCP,
+    TCPTLS,
 };
 
 struct TrafGenConfig {
@@ -40,6 +42,7 @@ class TrafGen
 
     std::shared_ptr<uvw::UDPHandle> _udp_handle;
     std::shared_ptr<uvw::TcpHandle> _tcp_handle;
+    std::shared_ptr<TCPSession> _tcp_session;
 
     std::shared_ptr<uvw::TimerHandle> _sender_timer;
     std::shared_ptr<uvw::TimerHandle> _timeout_timer;
