@@ -422,7 +422,7 @@ void TrafGen::start_quic()
 {
 
     // quic
-    ptls_context_t tlsctx = {
+    q_tlsctx = {
         .random_bytes = ptls_openssl_random_bytes,
         .get_time = &ptls_get_time,
         .key_exchanges = ptls_openssl_key_exchanges,
@@ -430,7 +430,7 @@ void TrafGen::start_quic()
     };
     q_stream_open = {q_on_stream_open};
     q_ctx = quicly_default_context;
-    q_ctx.tls = &tlsctx;
+    q_ctx.tls = &q_tlsctx;
     quicly_amend_ptls_context(q_ctx.tls);
     q_ctx.stream_open = &q_stream_open;
 
