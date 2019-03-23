@@ -382,8 +382,6 @@ static int q_on_receive(quicly_stream_t *stream, size_t off, const void *src, si
 {
     int ret;
 
-    std::cout << "STREAM RECEIVE" << std::endl;
-
     /* read input to receive buffer */
     if ((ret = quicly_streambuf_ingress_receive(stream, off, src, len)) != 0)
         return ret;
@@ -391,9 +389,6 @@ static int q_on_receive(quicly_stream_t *stream, size_t off, const void *src, si
     /* obtain contiguous bytes from the receive buffer */
     ptls_iovec_t input = quicly_streambuf_ingress_get(stream);
 
-    /* client: print to stdout */
-    fwrite(input.base, 1, input.len, stdout);
-    fflush(stdout);
     /* initiate connection close after receiving all data */
     if (quicly_recvstate_transfer_complete(&stream->recvstate))
         quicly_close(stream->conn, 0, "");
@@ -554,7 +549,6 @@ void TrafGen::q_process_msg(quicly_conn_t *conn, const uint8_t *src, size_t dgra
     size_t off, packet_len;
     assert(conn);
 
-    std::cerr << "QUIC PROCESS MSG" << std::endl;
     /* split UDP datagram into multiple QUIC packets */
     for (off = 0; off < dgram_len; off += packet_len) {
         quicly_decoded_packet_t decoded;
