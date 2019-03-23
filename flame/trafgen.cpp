@@ -8,6 +8,8 @@
 
 #include "trafgen.h"
 #include "tcptlssession.h"
+#include "picotls.h"
+#include "picotls/openssl.h"
 
 #include <ldns/rbtree.h>
 
@@ -252,6 +254,76 @@ void TrafGen::start_wait_timer_for_tcp_finish()
     _finish_session_timer->start(uvw::TimerHandle::Time{1}, uvw::TimerHandle::Time{50});
 }
 
+void TrafGen::quic_send()
+{
+
+    if (_udp_handle.get() && !_udp_handle->active())
+        return;
+    if (_qgen->finished())
+        return;
+    if (_free_id_list.size() == 0) {
+        std::cerr << "max in flight reached" << std::endl;
+        return;
+    }
+
+    uint16_t id{0};
+    for (int i = 0; i < _traf_config->batch_count; i++) {
+        if (_rate_limit && !_rate_limit->consume(1))
+            return;
+        if (_free_id_list.size() == 0) {
+            std::cerr << "max in flight reached" << std::endl;
+            return;
+        }
+        id = _free_id_list.back();
+        _free_id_list.pop_back();
+        assert(_in_flight.find(id) == _in_flight.end());
+        auto qt = _qgen->next_udp(id);
+
+        quicly_stream_t *stream0;
+        if ((stream0 = quicly_get_stream(q_conn, 0)) == NULL || !quicly_sendstate_is_open(&stream0->sendstate))
+            return;
+
+        /* write data to send buffer */
+        // XXX in UDP, this buffer gets freed by libuv. i think here it leaks!
+        quicly_streambuf_egress_write(stream0, (void*)std::get<0>(qt).get(), std::get<1>(qt));
+
+        _metrics->send(std::get<1>(qt), 1, _in_flight.size());
+        _in_flight[id].send_time = std::chrono::high_resolution_clock::now();
+    }
+
+    quicly_datagram_t *dgrams[16];
+    size_t num_dgrams = sizeof(dgrams) / sizeof(dgrams[0]);
+    int ret = quicly_send(q_conn, dgrams, &num_dgrams);
+    switch (ret) {
+        case 0: {
+            size_t i;
+            for (i = 0; i != num_dgrams; ++i) {
+                // XXX libuv needs to own this since it frees async
+                char *data = (char*)std::malloc(dgrams[i]->data.len);
+                std::memcpy(data, dgrams[i]->data.base, dgrams[i]->data.len);
+                if (data == nullptr) {
+                    throw std::runtime_error("unable to allocate datagram memory");
+                }
+                if (_traf_config->family == AF_INET) {
+                    _udp_handle->send<uvw::IPv4>(_traf_config->target_address, _traf_config->port, data, dgrams[i]->data.len);
+                } else {
+                    _udp_handle->send<uvw::IPv6>(_traf_config->target_address, _traf_config->port, data, dgrams[i]->data.len);
+                }
+                q_ctx.packet_allocator->free_packet(q_ctx.packet_allocator, dgrams[i]);
+            }
+        } break;
+        case QUICLY_ERROR_FREE_CONNECTION:
+            /* connection has been closed, free, and exit when running as a client */
+            quicly_free(q_conn);
+            q_conn = NULL;
+            return;
+        default:
+            std::cerr << "quicly_send returned" << std::endl;
+            return;
+    }
+
+}
+
 void TrafGen::udp_send()
 {
 
@@ -289,10 +361,77 @@ void TrafGen::udp_send()
     }
 }
 
+static int q_on_stop_sending(quicly_stream_t *stream, int err)
+{
+    std::cerr << "QUIC received STOP_SENDING: " << PRIu16 << "\n" << QUICLY_ERROR_GET_ERROR_CODE(err) << std::endl;
+    quicly_close(stream->conn, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0), "");
+    return 0;
+}
+
+static int q_on_receive_reset(quicly_stream_t *stream, int err)
+{
+    std::cerr << "QUIC received RESET_STREAM: " << PRIu16 << "\n" << QUICLY_ERROR_GET_ERROR_CODE(err) << std::endl;
+    quicly_close(stream->conn, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0), "");
+    return 0;
+}
+
+static int q_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
+{
+    int ret;
+
+    std::cout << "STREAM RECEIVE" << std::endl;
+
+    /* read input to receive buffer */
+    if ((ret = quicly_streambuf_ingress_receive(stream, off, src, len)) != 0)
+        return ret;
+
+    /* obtain contiguous bytes from the receive buffer */
+    ptls_iovec_t input = quicly_streambuf_ingress_get(stream);
+
+    /* client: print to stdout */
+    fwrite(input.base, 1, input.len, stdout);
+    fflush(stdout);
+    /* initiate connection close after receiving all data */
+    if (quicly_recvstate_transfer_complete(&stream->recvstate))
+        quicly_close(stream->conn, 0, "");
+
+    /* remove used bytes from receive buffer */
+    quicly_streambuf_ingress_shift(stream, input.len);
+
+    return 0;
+}
+
+static int q_on_stream_open(quicly_stream_open_t *self, quicly_stream_t *stream)
+{
+    static const quicly_stream_callbacks_t stream_callbacks = {
+        quicly_streambuf_destroy, quicly_streambuf_egress_shift, quicly_streambuf_egress_emit, q_on_stop_sending, q_on_receive,
+        q_on_receive_reset};
+    int ret;
+    std::cout << "STREAM OPEN" << std::endl;
+
+    if ((ret = quicly_streambuf_create(stream, sizeof(quicly_streambuf_t))) != 0)
+        return ret;
+    stream->callbacks = &stream_callbacks;
+    return 0;
+}
+
+
 void TrafGen::start_quic()
 {
 
-    // XXX copied from start_udp
+    // quic
+    ptls_context_t tlsctx = {
+        .random_bytes = ptls_openssl_random_bytes,
+        .get_time = &ptls_get_time,
+        .key_exchanges = ptls_openssl_key_exchanges,
+        .cipher_suites = ptls_openssl_cipher_suites,
+    };
+    quicly_stream_open_t stream_open = {q_on_stream_open};
+    q_ctx = quicly_default_context;
+    q_ctx.tls = &tlsctx;
+    quicly_amend_ptls_context(q_ctx.tls);
+    q_ctx.stream_open = &stream_open;
+
     _udp_handle = _loop->resource<uvw::UDPHandle>(_traf_config->family);
 
     _udp_handle->on<uvw::ErrorEvent>([this](const uvw::ErrorEvent &e, uvw::UDPHandle &) {
@@ -308,7 +447,7 @@ void TrafGen::start_quic()
     _metrics->trafgen_id(_udp_handle->sock().port);
 
     int ret;
-    if ((ret = quicly_connect(&q_conn, &_traf_config->q_ctx, _traf_config->target_address.data(),
+    if ((ret = quicly_connect(&q_conn, &q_ctx, _traf_config->target_address.data(),
                               (struct sockaddr*)&_traf_config->sa, _traf_config->salen, &q_next_cid, NULL, NULL)) != 0) {
         throw std::runtime_error("quicly connect failed: " + std::to_string(ret));
     }
@@ -335,6 +474,10 @@ void TrafGen::start()
         _sender_timer->start(uvw::TimerHandle::Time{1}, uvw::TimerHandle::Time{_traf_config->s_delay});
     } else if (_traf_config->protocol == Protocol::QUIC) {
         start_quic();
+        _sender_timer = _loop->resource<uvw::TimerHandle>();
+        _sender_timer->on<uvw::TimerEvent>([this](const uvw::TimerEvent &event, uvw::TimerHandle &h) {
+            quic_send();
+        });
     } else {
         start_tcp_session();
     }
@@ -409,10 +552,11 @@ void TrafGen::q_process_msg(quicly_conn_t *conn, const uint8_t *src, size_t dgra
 {
     size_t off, packet_len;
 
+    std::cerr << "QUIC PROCESS MSG" << std::endl;
     /* split UDP datagram into multiple QUIC packets */
     for (off = 0; off < dgram_len; off += packet_len) {
         quicly_decoded_packet_t decoded;
-        if ((packet_len = quicly_decode_packet(&_traf_config->q_ctx, &decoded, src, dgram_len - off)) == SIZE_MAX)
+        if ((packet_len = quicly_decode_packet(&q_ctx, &decoded, src, dgram_len - off)) == SIZE_MAX)
             return;
         /* TODO match incoming packets to connections, handle version negotiation, rebinding, retry, etc. */
         assert(conn);
@@ -430,48 +574,6 @@ int TrafGen::q_send_one(int fd, quicly_datagram_t *p)
     while ((ret = (int)sendmsg(fd, &mess, 0)) == -1 && errno == EINTR)
         ;
     return ret;
-}
-
-int TrafGen::q_run_loop(int fd, quicly_conn_t *conn, int (*stdin_read_cb)(quicly_conn_t *conn))
-{
-        /* read the QUIC fd */
-//        if (FD_ISSET(fd, &readfds)) {
-//            uint8_t buf[4096];
-//            struct sockaddr_storage sa;
-//            struct iovec vec = {.iov_base = buf, .iov_len = sizeof(buf)};
-//            struct msghdr msg = {.msg_name = &sa, .msg_namelen = sizeof(sa), .msg_iov = &vec, .msg_iovlen = 1};
-//            ssize_t rret;
-//            while ((rret = recvmsg(fd, &msg, 0)) <= 0 && errno == EINTR)
-//                ;
-//            if (rret > 0)
-//                q_process_msg(&conn, &msg, rret);
-//        }
-
-        /* send QUIC packets, if any */
-//        if (conn != NULL) {
-//            quicly_datagram_t *dgrams[16];
-//            size_t num_dgrams = sizeof(dgrams) / sizeof(dgrams[0]);
-//            int ret = quicly_send(conn, dgrams, &num_dgrams);
-//            switch (ret) {
-//                case 0: {
-//                    size_t i;
-//                    for (i = 0; i != num_dgrams; ++i) {
-//                        q_send_one(fd, dgrams[i]);
-//                        ctx.packet_allocator->free_packet(ctx.packet_allocator, dgrams[i]);
-//                    }
-//                } break;
-//                case QUICLY_ERROR_FREE_CONNECTION:
-//                    /* connection has been closed, free, and exit when running as a client */
-//                    quicly_free(conn);
-//                    conn = NULL;
-//                    return 0;
-//                default:
-//                    fprintf(stderr, "quicly_send returned %d\n", ret);
-//                    return 1;
-//            }
-//        }
-
-    return 0;
 }
 
 int TrafGen::q_read_stdin(quicly_conn_t *conn)

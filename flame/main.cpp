@@ -15,9 +15,6 @@
 #include "trafgen.h"
 #include "utils.h"
 
-#include "picotls.h"
-#include "picotls/openssl.h"
-
 #include <uvw.hpp>
 
 #include "version.h"
@@ -44,7 +41,7 @@ static const char USAGE[] =
       -r RECORD        The base record to use as the DNS query for generators [default: test.com]
       -T QTYPE         The query type to use for generators [default: A]
       -f FILE          Read records from FILE, one per row, QNAME TYPE
-      -p PORT          Which port to flame [defaults: 53, 853 for tcptls]
+      -p PORT          Which port to flame [defaults: 53, 853 for tcptls, 784 for quic]
       -F FAMILY        Internet family (inet/inet6) [default: inet]
       -P PROTOCOL      Protocol to use (udp/tcp/tcptls/quic) [default: udp]
       -g GENERATOR     Generate queries with the given generator [default: static]
@@ -143,57 +140,6 @@ bool arg_exists(const char *needle, int argc, char *argv[])
         }
     }
     return false;
-}
-
-int q_on_stop_sending(quicly_stream_t *stream, int err)
-{
-    fprintf(stderr, "received STOP_SENDING: %" PRIu16 "\n", QUICLY_ERROR_GET_ERROR_CODE(err));
-    quicly_close(stream->conn, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0), "");
-    return 0;
-}
-
-int q_on_receive_reset(quicly_stream_t *stream, int err)
-{
-    fprintf(stderr, "received RESET_STREAM: %" PRIu16 "\n", QUICLY_ERROR_GET_ERROR_CODE(err));
-    quicly_close(stream->conn, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0), "");
-    return 0;
-}
-
-int q_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
-{
-    int ret;
-
-    /* read input to receive buffer */
-    if ((ret = quicly_streambuf_ingress_receive(stream, off, src, len)) != 0)
-        return ret;
-
-    /* obtain contiguous bytes from the receive buffer */
-    ptls_iovec_t input = quicly_streambuf_ingress_get(stream);
-
-    /* client: print to stdout */
-    fwrite(input.base, 1, input.len, stdout);
-    fflush(stdout);
-    /* initiate connection close after receiving all data */
-    if (quicly_recvstate_transfer_complete(&stream->recvstate))
-        quicly_close(stream->conn, 0, "");
-
-    /* remove used bytes from receive buffer */
-    quicly_streambuf_ingress_shift(stream, input.len);
-
-    return 0;
-}
-
-int q_on_stream_open(quicly_stream_open_t *self, quicly_stream_t *stream)
-{
-    static const quicly_stream_callbacks_t stream_callbacks = {
-        quicly_streambuf_destroy, quicly_streambuf_egress_shift, quicly_streambuf_egress_emit, q_on_stop_sending, q_on_receive,
-        q_on_receive_reset};
-    int ret;
-
-    if ((ret = quicly_streambuf_create(stream, sizeof(quicly_streambuf_t))) != 0)
-        return ret;
-    stream->callbacks = &stream_callbacks;
-    return 0;
 }
 
 int main(int argc, char *argv[])
@@ -358,19 +304,6 @@ int main(int argc, char *argv[])
     traf_config->r_timeout = args["-t"].asLong();
     std::memcpy(&traf_config->sa, node->ai_addr, node->ai_addrlen);
     traf_config->salen = node->ai_addrlen;
-
-    // quic
-    ptls_context_t tlsctx = {
-        .random_bytes = ptls_openssl_random_bytes,
-        .get_time = &ptls_get_time,
-        .key_exchanges = ptls_openssl_key_exchanges,
-        .cipher_suites = ptls_openssl_cipher_suites,
-    };
-    quicly_stream_open_t stream_open = {q_on_stream_open};
-    traf_config->q_ctx = quicly_default_context;
-    traf_config->q_ctx.tls = &tlsctx;
-    quicly_amend_ptls_context(traf_config->q_ctx.tls);
-    traf_config->q_ctx.stream_open = &stream_open;
 
     std::vector<std::shared_ptr<TrafGen>> throwers;
     for (auto i = 0; i < c_count; i++) {
