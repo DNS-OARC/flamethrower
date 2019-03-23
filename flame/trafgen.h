@@ -61,6 +61,7 @@ class TrafGen
     std::vector<uint16_t> _free_id_list;
 
     quicly_conn_t *q_conn;
+    quicly_stream_open_t q_stream_open;
     quicly_context_t q_ctx;
     quicly_cid_plaintext_t q_next_cid;
 
@@ -78,9 +79,7 @@ class TrafGen
     void start_tcp_session();
     void start_wait_timer_for_tcp_finish();
 
-    int q_send_one(int fd, quicly_datagram_t *p);
     void q_process_msg(quicly_conn_t *conn, const uint8_t *src, size_t dgram_len);
-    int q_read_stdin(quicly_conn_t *conn);
 
 public:
     TrafGen(std::shared_ptr<uvw::Loop> l,

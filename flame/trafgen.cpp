@@ -279,13 +279,16 @@ void TrafGen::quic_send()
         assert(_in_flight.find(id) == _in_flight.end());
         auto qt = _qgen->next_udp(id);
 
-        quicly_stream_t *stream0;
-        if ((stream0 = quicly_get_stream(q_conn, 0)) == NULL || !quicly_sendstate_is_open(&stream0->sendstate))
+        quicly_stream_t *stream; /* we retain the opened stream via the on_stream_open callback */
+        quicly_open_stream(q_conn, &stream, 0);
+        if (!quicly_sendstate_is_open(&stream->sendstate))
             return;
 
         /* write data to send buffer */
-        // XXX in UDP, this buffer gets freed by libuv. i think here it leaks!
-        quicly_streambuf_egress_write(stream0, (void*)std::get<0>(qt).get(), std::get<1>(qt));
+        quicly_streambuf_egress_write(stream, (void*)std::get<0>(qt).get(), std::get<1>(qt));
+        // ???
+        // in UDP, this buffer gets freed by libuv after send. in quic, it gets copied internally to
+        // quic datagram, so this can be freed immediately
 
         _metrics->send(std::get<1>(qt), 1, _in_flight.size());
         _in_flight[id].send_time = std::chrono::high_resolution_clock::now();
@@ -407,7 +410,6 @@ static int q_on_stream_open(quicly_stream_open_t *self, quicly_stream_t *stream)
         quicly_streambuf_destroy, quicly_streambuf_egress_shift, quicly_streambuf_egress_emit, q_on_stop_sending, q_on_receive,
         q_on_receive_reset};
     int ret;
-    std::cout << "STREAM OPEN" << std::endl;
 
     if ((ret = quicly_streambuf_create(stream, sizeof(quicly_streambuf_t))) != 0)
         return ret;
@@ -426,11 +428,11 @@ void TrafGen::start_quic()
         .key_exchanges = ptls_openssl_key_exchanges,
         .cipher_suites = ptls_openssl_cipher_suites,
     };
-    quicly_stream_open_t stream_open = {q_on_stream_open};
+    q_stream_open = {q_on_stream_open};
     q_ctx = quicly_default_context;
     q_ctx.tls = &tlsctx;
     quicly_amend_ptls_context(q_ctx.tls);
-    q_ctx.stream_open = &stream_open;
+    q_ctx.stream_open = &q_stream_open;
 
     _udp_handle = _loop->resource<uvw::UDPHandle>(_traf_config->family);
 
@@ -451,8 +453,6 @@ void TrafGen::start_quic()
                               (struct sockaddr*)&_traf_config->sa, _traf_config->salen, &q_next_cid, NULL, NULL)) != 0) {
         throw std::runtime_error("quicly connect failed: " + std::to_string(ret));
     }
-    quicly_stream_t *stream; /* we retain the opened stream via the on_stream_open callback */
-    quicly_open_stream(q_conn, &stream, 0);
 
     _udp_handle->on<uvw::UDPDataEvent>([this](const uvw::UDPDataEvent &event, uvw::UDPHandle &h) {
         q_process_msg(q_conn, (const uint8_t*)event.data.get(), event.length);
@@ -478,6 +478,7 @@ void TrafGen::start()
         _sender_timer->on<uvw::TimerEvent>([this](const uvw::TimerEvent &event, uvw::TimerHandle &h) {
             quic_send();
         });
+        _sender_timer->start(uvw::TimerHandle::Time{1}, uvw::TimerHandle::Time{_traf_config->s_delay});
     } else {
         start_tcp_session();
     }
@@ -551,6 +552,7 @@ void TrafGen::stop()
 void TrafGen::q_process_msg(quicly_conn_t *conn, const uint8_t *src, size_t dgram_len)
 {
     size_t off, packet_len;
+    assert(conn);
 
     std::cerr << "QUIC PROCESS MSG" << std::endl;
     /* split UDP datagram into multiple QUIC packets */
@@ -559,43 +561,8 @@ void TrafGen::q_process_msg(quicly_conn_t *conn, const uint8_t *src, size_t dgra
         if ((packet_len = quicly_decode_packet(&q_ctx, &decoded, src, dgram_len - off)) == SIZE_MAX)
             return;
         /* TODO match incoming packets to connections, handle version negotiation, rebinding, retry, etc. */
-        assert(conn);
         /* let the current connection handle ingress packets */
         quicly_receive(conn, &decoded);
     }
 }
-
-int TrafGen::q_send_one(int fd, quicly_datagram_t *p)
-{
-    struct iovec vec = {.iov_base = p->data.base, .iov_len = p->data.len};
-    struct msghdr mess = {.msg_name = &p->sa, .msg_namelen = p->salen, .msg_iov = &vec, .msg_iovlen = 1};
-    int ret;
-
-    while ((ret = (int)sendmsg(fd, &mess, 0)) == -1 && errno == EINTR)
-        ;
-    return ret;
-}
-
-int TrafGen::q_read_stdin(quicly_conn_t *conn)
-{
-    quicly_stream_t *stream0;
-    char buf[4096];
-    size_t rret;
-
-    if ((stream0 = quicly_get_stream(conn, 0)) == NULL || !quicly_sendstate_is_open(&stream0->sendstate))
-        return 0;
-
-    while ((rret = read(0, buf, sizeof(buf))) == -1 && errno == EINTR)
-        ;
-    if (rret == 0) {
-        /* stdin closed, close the send-side of stream0 */
-        quicly_streambuf_egress_shutdown(stream0);
-        return 0;
-    } else {
-        /* write data to send buffer */
-        quicly_streambuf_egress_write(stream0, buf, rret);
-        return 1;
-    }
-}
-
 
