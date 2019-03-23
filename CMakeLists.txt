@@ -41,7 +41,8 @@ add_compile_options(-Wall)
 # Find and setup all dependencies BEFORE declaring targets.
 # ::-------------------------------------------------------------------------:: 
 
-find_package(PkgConfig)
+find_package(PkgConfig REQUIRED)
+find_package(OpenSSL REQUIRED)
 
 pkg_search_module(LIBLDNS REQUIRED libldns ldns)
 pkg_check_modules(LIBUV REQUIRED libuv)
@@ -52,6 +53,9 @@ pkg_check_modules(LIBGNUTLS REQUIRED gnutls>=3.3)
 # ::-------------------------------------------------------------------------:: 
 
 add_library(flamecore
+        3rd/quicly/deps/picotls/lib/openssl.c
+        3rd/quicly/deps/picotls/lib/pembase64.c
+        3rd/quicly/deps/picotls/lib/picotls.c
         flame/metrics.cpp
         flame/metrics.h
         flame/query.cpp
@@ -62,11 +66,13 @@ add_library(flamecore
         flame/tcpsession.h
         flame/tcptlssession.cpp
         flame/tcptlssession.h
-        flame/utils.cpp flame/utils.h)
+        flame/utils.cpp
+        flame/utils.h)
 
 target_include_directories(flamecore
         PUBLIC ${LIBUV_INCLUDE_DIRS}
         PUBLIC ${LIBLDNS_INCLUDE_DIRS}
+        PUBLIC ${OPENSSL_INCLUDE_DIR}
         PRIVATE ${LIBGNUTLS_INCLUDE_DIRS}
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/TokenBucket"
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/docopt.cpp"
@@ -82,6 +88,7 @@ target_link_libraries(flamecore
         PRIVATE ${LIBLDNS_LIBRARIES}
         PRIVATE ${LIBGNUTLS_LDFLAGS}
         PRIVATE ${LIBGNUTLS_LIBRARIES}
+        PRIVATE "-L ${CMAKE_SOURCE_DIR}/3rd/quicly/build/ -lquicly"
         )
 
 add_executable(flame

@@ -1,4 +1,4 @@
-// Copyright 2017 NSONE, Inc
+// Copyright 2017-2019 NSONE, Inc
 
 #include <algorithm>
 #include <iostream>
@@ -370,4 +370,152 @@ void TrafGen::stop()
     }
     long shutdown_length = (_in_flight.size()) ? (_traf_config->r_timeout * 1000) : 1;
     _shutdown_timer->start(uvw::TimerHandle::Time{shutdown_length}, uvw::TimerHandle::Time{0});
+
 }
+
+void TrafGen::q_process_msg(quicly_conn_t **conn, struct msghdr *msg, size_t dgram_len)
+{
+    size_t off, packet_len;
+
+    /* split UDP datagram into multiple QUIC packets */
+    for (off = 0; off < dgram_len; off += packet_len) {
+        quicly_decoded_packet_t decoded;
+        if ((packet_len = quicly_decode_packet(&ctx, &decoded, (uint8_t*)msg->msg_iov[0].iov_base + off, dgram_len - off)) == SIZE_MAX)
+            return;
+        /* TODO match incoming packets to connections, handle version negotiation, rebinding, retry, etc. */
+        if (*conn != NULL) {
+            /* let the current connection handle ingress packets */
+            quicly_receive(*conn, &decoded);
+        } else {
+            /* assume that the packet is a new connection */
+            quicly_accept(conn, &ctx, (struct sockaddr*)msg->msg_name, msg->msg_namelen, &decoded, ptls_iovec_init(NULL, 0), &next_cid, NULL);
+        }
+    }
+}
+
+int TrafGen::q_send_one(int fd, quicly_datagram_t *p)
+{
+    struct iovec vec = {.iov_base = p->data.base, .iov_len = p->data.len};
+    struct msghdr mess = {.msg_name = &p->sa, .msg_namelen = p->salen, .msg_iov = &vec, .msg_iovlen = 1};
+    int ret;
+
+    while ((ret = (int)sendmsg(fd, &mess, 0)) == -1 && errno == EINTR)
+        ;
+    return ret;
+}
+
+int TrafGen::q_run_loop(int fd, quicly_conn_t *conn, int (*stdin_read_cb)(quicly_conn_t *conn))
+{
+    while (1) {
+
+        /* wait for sockets to become readable, or some event in the QUIC stack to fire */
+        fd_set readfds;
+        struct timeval *tv, tvbuf;
+        do {
+            if (conn != NULL) {
+                int64_t timeout_msec = quicly_get_first_timeout(conn) - ctx.now->cb(ctx.now);
+                if (timeout_msec <= 0) {
+                    tvbuf.tv_sec = 0;
+                    tvbuf.tv_usec = 0;
+                } else {
+                    tvbuf.tv_sec = timeout_msec / 1000;
+                    tvbuf.tv_usec = timeout_msec % 1000 * 1000;
+                }
+                tv = &tvbuf;
+            } else {
+                tv = NULL;
+            }
+            FD_ZERO(&readfds);
+            FD_SET(fd, &readfds);
+            /* we want to read input from stdin */
+            if (stdin_read_cb != NULL)
+                FD_SET(0, &readfds);
+        } while (select(fd + 1, &readfds, NULL, NULL, tv) == -1 && errno == EINTR);
+
+        /* read the QUIC fd */
+        if (FD_ISSET(fd, &readfds)) {
+            uint8_t buf[4096];
+            struct sockaddr_storage sa;
+            struct iovec vec = {.iov_base = buf, .iov_len = sizeof(buf)};
+            struct msghdr msg = {.msg_name = &sa, .msg_namelen = sizeof(sa), .msg_iov = &vec, .msg_iovlen = 1};
+            ssize_t rret;
+            while ((rret = recvmsg(fd, &msg, 0)) <= 0 && errno == EINTR)
+                ;
+            if (rret > 0)
+                q_process_msg(&conn, &msg, rret);
+        }
+
+        /* read stdin, send the input to the active stram */
+        if (FD_ISSET(0, &readfds)) {
+            assert(stdin_read_cb != NULL);
+            if (!(*stdin_read_cb)(conn))
+                stdin_read_cb = NULL;
+        }
+
+        /* send QUIC packets, if any */
+        if (conn != NULL) {
+            quicly_datagram_t *dgrams[16];
+            size_t num_dgrams = sizeof(dgrams) / sizeof(dgrams[0]);
+            int ret = quicly_send(conn, dgrams, &num_dgrams);
+            switch (ret) {
+                case 0: {
+                    size_t i;
+                    for (i = 0; i != num_dgrams; ++i) {
+                        q_send_one(fd, dgrams[i]);
+                        ctx.packet_allocator->free_packet(ctx.packet_allocator, dgrams[i]);
+                    }
+                } break;
+                case QUICLY_ERROR_FREE_CONNECTION:
+                    /* connection has been closed, free, and exit when running as a client */
+                    quicly_free(conn);
+                    conn = NULL;
+                    return 0;
+                default:
+                    fprintf(stderr, "quicly_send returned %d\n", ret);
+                    return 1;
+            }
+        }
+    }
+
+    return 0;
+}
+
+int TrafGen::q_read_stdin(quicly_conn_t *conn)
+{
+    quicly_stream_t *stream0;
+    char buf[4096];
+    size_t rret;
+
+    if ((stream0 = quicly_get_stream(conn, 0)) == NULL || !quicly_sendstate_is_open(&stream0->sendstate))
+        return 0;
+
+    while ((rret = read(0, buf, sizeof(buf))) == -1 && errno == EINTR)
+        ;
+    if (rret == 0) {
+        /* stdin closed, close the send-side of stream0 */
+        quicly_streambuf_egress_shutdown(stream0);
+        return 0;
+    } else {
+        /* write data to send buffer */
+        quicly_streambuf_egress_write(stream0, buf, rret);
+        return 1;
+    }
+}
+
+int TrafGen::q_run_client(int fd, const char *host, struct sockaddr *sa, socklen_t salen)
+{
+    quicly_conn_t *conn;
+    int ret;
+
+    /* initiate a connection, and open a stream */
+    if ((ret = quicly_connect(&conn, &ctx, host, sa, salen, &next_cid, NULL, NULL)) != 0) {
+        fprintf(stderr, "quicly_connect failed:%d\n", ret);
+        return 1;
+    }
+    quicly_stream_t *stream; /* we retain the opened stream via the on_stream_open callback */
+    quicly_open_stream(conn, &stream, 0);
+
+    /* enter the event loop with a connection object */
+    return q_run_loop(fd, conn, nullptr);
+}
+
