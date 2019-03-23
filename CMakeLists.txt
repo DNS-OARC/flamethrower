@@ -72,6 +72,8 @@ target_include_directories(flamecore
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/docopt.cpp"
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/json"
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/uvw"
+        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/quicly/include"
+        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/quicly/deps/picotls/include"
         )
 
 target_link_libraries(flamecore
