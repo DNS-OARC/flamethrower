@@ -42,11 +42,11 @@ add_compile_options(-Wall)
 # ::-------------------------------------------------------------------------:: 
 
 find_package(PkgConfig REQUIRED)
-find_package(OpenSSL REQUIRED)
 
 pkg_search_module(LIBLDNS REQUIRED libldns ldns)
 pkg_check_modules(LIBUV REQUIRED libuv)
 pkg_check_modules(LIBGNUTLS REQUIRED gnutls>=3.3)
+pkg_check_modules(OPENSSL REQUIRED libcrypto>=1.1)
 
 # ::-------------------------------------------------------------------------:: 
 # BUILD TARGETS
@@ -88,6 +88,7 @@ target_link_libraries(flamecore
         PRIVATE ${LIBLDNS_LIBRARIES}
         PRIVATE ${LIBGNUTLS_LDFLAGS}
         PRIVATE ${LIBGNUTLS_LIBRARIES}
+        PRIVATE ${OPENSSL_LDFLAGS}
         PRIVATE "-L ${CMAKE_SOURCE_DIR}/3rd/quicly/build/ -lquicly"
         )
 
