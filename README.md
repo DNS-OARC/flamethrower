@@ -13,7 +13,7 @@ This code is released under Apache License 2.0. You can find terms and condition
 Overview
 --------
 
-Flamethrower is a small, fast, configurable tool for functional testing, benchmarking, and stress testing DNS servers and networks. It supports IPv4, IPv6, UDP and TCP, and has a modular system for generating queries used in the tests.
+Flamethrower is a small, fast, configurable tool for functional testing, benchmarking, and stress testing DNS servers and networks. It supports IPv4, IPv6, UDP, TCP, TCPTLS, QUIC and has a modular system for generating queries used in the tests.
 
 It was built as an alternative to dnsperf (https://nominum.com/measurement-tools/), and many of the command line options are compatible. 
 
@@ -25,6 +25,7 @@ Dependencies
 * libuv >= 1.23.0
 * libldns >= 1.7.0
 * gnutls >= 3.3
+* quicly 
 * C++ compiler supporting C++17
 
 Build
