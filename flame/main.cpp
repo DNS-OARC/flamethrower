@@ -306,6 +306,8 @@ int main(int argc, char *argv[])
     traf_config->s_delay = s_delay;
     traf_config->protocol = proto;
     traf_config->r_timeout = args["-t"].asLong();
+    std::memcpy(&traf_config->sa, node->ai_addr, node->ai_addrlen);
+    traf_config->salen = node->ai_addrlen;
 
     std::vector<std::shared_ptr<TrafGen>> throwers;
     for (auto i = 0; i < c_count; i++) {
