@@ -11,6 +11,8 @@
 #include <picotls.h>
 #include <picotls/openssl.h>
 
+#include <quicly/defaults.h>
+
 #include <ldns/rbtree.h>
 
 #include <ldns/host2wire.h>
