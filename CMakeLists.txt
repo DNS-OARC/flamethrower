@@ -69,7 +69,7 @@ add_library(flamecore
 target_include_directories(flamecore
         PUBLIC ${LIBUV_INCLUDE_DIRS}
         PUBLIC ${LIBLDNS_INCLUDE_DIRS}
-        PUBLIC ${OPENSSL_INCLUDE_DIR}
+        PUBLIC ${OPENSSL_INCLUDE_DIRS}
         PRIVATE ${LIBGNUTLS_INCLUDE_DIRS}
         )
 
@@ -88,7 +88,7 @@ target_link_libraries(flamecore
         PRIVATE ${LIBLDNS_LIBRARIES}
         PRIVATE ${LIBGNUTLS_LDFLAGS}
         PRIVATE ${LIBGNUTLS_LIBRARIES}
-        PRIVATE ${OPENSSL_LDFLAGS}
+        PRIVATE ${OPENSSL_LIBRARIES}
         PRIVATE "-L ${CMAKE_SOURCE_DIR}/3rd/quicly/build/ -lquicly"
         picotls
         )
