@@ -288,6 +288,7 @@ void TrafGen::quic_send()
 
         /* write data to send buffer */
         quicly_streambuf_egress_write(stream, (void*)std::get<0>(qt).get(), std::get<1>(qt));
+        quicly_streambuf_egress_shutdown(stream);
         // ???
         // in UDP, this buffer gets freed by libuv after send. in quic, it gets copied internally to
         // quic datagram, so this can be freed immediately
