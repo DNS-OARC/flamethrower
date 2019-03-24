@@ -53,9 +53,6 @@ pkg_check_modules(OPENSSL REQUIRED libcrypto>=1.1)
 # ::-------------------------------------------------------------------------:: 
 
 add_library(flamecore
-        3rd/quicly/deps/picotls/lib/openssl.c
-        3rd/quicly/deps/picotls/lib/pembase64.c
-        3rd/quicly/deps/picotls/lib/picotls.c
         flame/metrics.cpp
         flame/metrics.h
         flame/query.cpp
@@ -93,7 +90,23 @@ target_link_libraries(flamecore
         PRIVATE ${LIBGNUTLS_LIBRARIES}
         PRIVATE ${OPENSSL_LDFLAGS}
         PRIVATE "-L ${CMAKE_SOURCE_DIR}/3rd/quicly/build/ -lquicly"
+        picotls
         )
+
+add_library(picotls STATIC
+        3rd/quicly/deps/picotls/lib/openssl.c
+        3rd/quicly/deps/picotls/lib/pembase64.c
+        3rd/quicly/deps/picotls/lib/picotls.c
+)
+
+target_include_directories(picotls
+        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/quicly/deps/picotls/include"
+        PUBLIC ${OPENSSL_INCLUDE_DIRS}
+)
+
+target_link_libraries(picotls
+        PUBLIC ${OPENSSL_LDFLAGS}
+)
 
 add_executable(flame
         3rd/docopt.cpp/docopt.cpp
