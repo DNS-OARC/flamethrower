@@ -74,6 +74,9 @@ target_include_directories(flamecore
         PUBLIC ${LIBLDNS_INCLUDE_DIRS}
         PUBLIC ${OPENSSL_INCLUDE_DIR}
         PRIVATE ${LIBGNUTLS_INCLUDE_DIRS}
+        )
+
+target_include_directories(flamecore SYSTEM
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/TokenBucket"
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/docopt.cpp"
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/json"
