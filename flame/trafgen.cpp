@@ -8,8 +8,8 @@
 
 #include "trafgen.h"
 #include "tcptlssession.h"
-#include "picotls.h"
-#include "picotls/openssl.h"
+#include <picotls.h>
+#include <picotls/openssl.h>
 
 #include <ldns/rbtree.h>
 
