@@ -8,10 +8,12 @@
 
 #include "trafgen.h"
 #include "tcptlssession.h"
+
+#ifdef QUIC_ENABLE
 #include <picotls.h>
 #include <picotls/openssl.h>
-
 #include <quicly/defaults.h>
+#endif
 
 #include <ldns/rbtree.h>
 
@@ -256,6 +258,7 @@ void TrafGen::start_wait_timer_for_tcp_finish()
     _finish_session_timer->start(uvw::TimerHandle::Time{1}, uvw::TimerHandle::Time{50});
 }
 
+#ifdef QUIC_ENABLE
 void TrafGen::quic_send()
 {
 
@@ -329,6 +332,7 @@ void TrafGen::quic_send()
     }
 
 }
+#endif
 
 void TrafGen::udp_send()
 {
@@ -367,6 +371,7 @@ void TrafGen::udp_send()
     }
 }
 
+#ifdef QUIC_ENABLE
 static int q_on_stop_sending(quicly_stream_t *stream, int err)
 {
     std::cerr << "QUIC received STOP_SENDING: " << PRIu16 << "\n" << QUICLY_ERROR_GET_ERROR_CODE(err) << std::endl;
@@ -459,6 +464,7 @@ void TrafGen::start_quic()
     _udp_handle->recv();
 
 }
+#endif
 
 void TrafGen::start()
 {
@@ -470,14 +476,18 @@ void TrafGen::start()
             udp_send();
         });
         _sender_timer->start(uvw::TimerHandle::Time{1}, uvw::TimerHandle::Time{_traf_config->s_delay});
-    } else if (_traf_config->protocol == Protocol::QUIC) {
+    }
+#ifdef QUIC_ENABLE
+    else if (_traf_config->protocol == Protocol::QUIC) {
         start_quic();
         _sender_timer = _loop->resource<uvw::TimerHandle>();
         _sender_timer->on<uvw::TimerEvent>([this](const uvw::TimerEvent &event, uvw::TimerHandle &h) {
             quic_send();
         });
         _sender_timer->start(uvw::TimerHandle::Time{1}, uvw::TimerHandle::Time{_traf_config->s_delay});
-    } else {
+    }
+#endif
+    else {
         start_tcp_session();
     }
 
@@ -547,6 +557,7 @@ void TrafGen::stop()
 
 }
 
+#ifdef QUIC_ENABLE
 void TrafGen::q_process_msg(quicly_conn_t *conn, const uint8_t *src, size_t dgram_len)
 {
     size_t off, packet_len;
@@ -562,4 +573,4 @@ void TrafGen::q_process_msg(quicly_conn_t *conn, const uint8_t *src, size_t dgra
         quicly_receive(conn, &decoded);
     }
 }
-
+#endif

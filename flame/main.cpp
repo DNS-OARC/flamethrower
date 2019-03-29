@@ -17,7 +17,7 @@
 
 #include <uvw.hpp>
 
-#include "version.h"
+#include "flame.h"
 
 static const char USAGE[] =
     R"(Flamethrower.
@@ -184,10 +184,20 @@ int main(int argc, char *argv[])
             c_count = 30;
     } else if (args["-P"].asString() == "udp") {
         proto = Protocol::UDP;
-    } else if (args["-P"].asString() == "quic") {
+    }
+#ifdef QUIC_ENABLE
+    else if (args["-P"].asString() == "quic") {
         proto = Protocol::QUIC;
-    } else {
-        std::cerr << "protocol must be 'udp', 'quic', 'tcp' or 'tcptls'" << std::endl;
+    }
+#endif
+    else {
+        std::cerr << "protocol must be 'udp', 'tcp', 'tcptls'";
+#ifdef QUIC_ENABLE
+        std::cerr << ", 'quic'";
+#else
+        std::cerr << " (quic support is disabled)";
+#endif
+        std::cerr << std::endl;
         return 1;
     }
 
@@ -195,9 +205,11 @@ int main(int argc, char *argv[])
         if (proto == Protocol::TCPTLS) {
             args["-p"] = std::string("853");
         }
+#ifdef QUIC_ENABLE
         else if (proto == Protocol::QUIC) {
             args["-p"] = std::string("784");
         }
+#endif
         else {
             args["-p"] = std::string("53");
         }

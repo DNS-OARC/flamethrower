@@ -15,8 +15,6 @@ Overview
 
 Flamethrower is a small, fast, configurable tool for functional testing, benchmarking, and stress testing DNS servers and networks. It supports IPv4, IPv6, UDP, TCP, TCPTLS, QUIC and has a modular system for generating queries used in the tests.
 
-It was built as an alternative to dnsperf (https://nominum.com/measurement-tools/), and many of the command line options are compatible. 
-
 Dependencies
 ------------
 
@@ -25,16 +23,39 @@ Dependencies
 * libuv >= 1.23.0
 * libldns >= 1.7.0
 * gnutls >= 3.3
-* quicly 
 * C++ compiler supporting C++17
 
 Build
 -----
 
-CMake based, required libuv and ldns.
+CMake based build, requires dependencies above. You may need to set PKG_CONFIG_PATH to help locate the dependencies.
 ```
 mkdir build; cd build
 cmake ..
+make
+```
+
+Experimental support is included for DNS-over-QUIC, following the draft RFC https://datatracker.ietf.org/doc/draft-huitema-quic-dnsoquic/
+DoQ requires additional dependencies:
+ * quicly https://github.com/h2o/quicly
+ * openssl >= 1.0.2
+ 
+To build with DoQ support, first checkout and build quicly:
+```
+git clone https://github.com/h2o/quicly.git
+cd quicly
+git submodule update --init --recursive
+mkdir build; cd build
+cmake ..
+make
+```
+the name of the "build" directory used to build quicly is significant, as it's referenced in the flamethrower paths.
+You then need to manually symlink quicly into the flamethrower 3rd party directory before enabling support in flamethrower and building:
+```
+cd flamethrower
+ln -s <PATH-TO-QUICLY> 3rd/
+mkdir build; cd build
+cmake -DQUIC_ENABLE=ON ..
 make
 ```
 
