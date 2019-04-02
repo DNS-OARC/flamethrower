@@ -32,7 +32,6 @@ script:
   - mkdir build && cd build && cmake ..
   - make all tests
   - ./tests
-  - mkdir quic-build && cd quic-build
-  - cmake -DQUIC_ENABLE=ON ..
+  - mkdir quic-build && cd quic-build && cmake -DQUIC_ENABLE=ON ..
   - make all tests
   - ./tests
