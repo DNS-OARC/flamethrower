@@ -309,7 +309,7 @@ void TrafGen::quic_send()
             for (i = 0; i != num_dgrams; ++i) {
                 // XXX libuv needs to own this since it frees async
                 char *data = (char*)std::malloc(dgrams[i]->data.len);
-                std::memcpy(data, dgrams[i]->data.base, dgrams[i]->data.len);
+                memcpy(data, dgrams[i]->data.base, dgrams[i]->data.len);
                 if (data == nullptr) {
                     throw std::runtime_error("unable to allocate datagram memory");
                 }
