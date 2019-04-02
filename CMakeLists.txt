@@ -52,7 +52,7 @@ pkg_check_modules(LIBGNUTLS REQUIRED gnutls>=3.3)
 
 option(QUIC_ENABLE "Enable QUIC support" OFF)
 if (QUIC_ENABLE)
-    pkg_check_modules(OPENSSL REQUIRED libcrypto>=1.1)
+    pkg_check_modules(OPENSSL REQUIRED libcrypto>=1.0.2)
     message(STATUS "QUIC support is enabled")
 else()
     message(STATUS "QUIC support is disabled")
