@@ -11,6 +11,7 @@ matrix:
             - cmake
             - libssl-dev
             - libgnutls-dev
+            - openssl
     - os: osx
       addons:
         homebrew:
@@ -24,8 +25,14 @@ matrix:
 before_script:
   - if [ "${TRAVIS_OS_NAME}" = linux ]; then sh ci/install-libuv.sh; fi
   - if [ "${TRAVIS_OS_NAME}" = linux ]; then sh ci/install-ldns.sh; fi
+  - sh ci/install-quicly.sh
 
 script:
+  - ln -s /tmp/quicly 3rd/
   - mkdir build && cd build && cmake ..
+  - make all tests
+  - ./tests
+  - mkdir quic-build && cd quic-build
+  - cmake -DQUIC_ENABLE=ON ..
   - make all tests
   - ./tests
