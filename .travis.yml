@@ -33,6 +33,8 @@ script:
   - make all tests
   - ./tests
   - cd ..
-  - mkdir quic-build && cd quic-build && cmake -DQUIC_ENABLE=ON ..
+  - mkdir quic-build && cd quic-build
+  - if [ "${TRAVIS_OS_NAME}" = linux ]; then sh cmake -DQUIC_ENABLE=ON ..; fi
+  - if [ "${TRAVIS_OS_NAME}" = osx ]; then sh PKG_CONFIG_PATH=/usr/local/opt/openssl@1.1/lib/pkgconfig cmake -DQUIC_ENABLE=ON ..; fi
   - make all tests
   - ./tests
