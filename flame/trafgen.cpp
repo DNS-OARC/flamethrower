@@ -216,9 +216,9 @@ void TrafGen::start_tcp_session()
 
     // fires ConnectEvent when connected
     if (_traf_config->family == AF_INET) {
-        _tcp_handle->connect<uvw::IPv4>(_traf_config->target_address, _traf_config->port);
+        _tcp_handle->connect<uvw::IPv4>(_traf_config->next_target_address(), _traf_config->port);
     } else {
-        _tcp_handle->connect<uvw::IPv6>(_traf_config->target_address, _traf_config->port);
+        _tcp_handle->connect<uvw::IPv6>(_traf_config->next_target_address(), _traf_config->port);
     }
 }
 
@@ -276,11 +276,11 @@ void TrafGen::udp_send()
         assert(_in_flight.find(id) == _in_flight.end());
         auto qt = _qgen->next_udp(id);
         if (_traf_config->family == AF_INET) {
-            _udp_handle->send<uvw::IPv4>(_traf_config->target_address, _traf_config->port,
+            _udp_handle->send<uvw::IPv4>(_traf_config->next_target_address(), _traf_config->port,
                 std::move(std::get<0>(qt)),
                 std::get<1>(qt));
         } else {
-            _udp_handle->send<uvw::IPv6>(_traf_config->target_address, _traf_config->port,
+            _udp_handle->send<uvw::IPv6>(_traf_config->next_target_address(), _traf_config->port,
                 std::move(std::get<0>(qt)),
                 std::get<1>(qt));
         }

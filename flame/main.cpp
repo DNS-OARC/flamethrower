@@ -30,6 +30,10 @@ static const char USAGE[] =
       flame (-h | --help)
       flame --version
 
+    TARGET may be a hostname, an IP address, or a comma separated list of either. If multiple targets are specified,
+    they will be sent queries in a strict round robin fashion across all concurrent generators. All targets must
+    share the same port, protocol, and internet family.
+
     Options:
       -h --help        Show this screen.
       --version        Show version.
@@ -202,16 +206,8 @@ int main(int argc, char *argv[])
 
     auto runtime_limit = args["-l"].asLong();
 
-    auto request = loop->resource<uvw::GetAddrInfoReq>();
-    auto target_resolved = request->addrInfoSync(args["TARGET"].asString(), args["-p"].asString());
-    if (!target_resolved.first) {
-        std::cerr << "unable to resolve target address: " << args["TARGET"].asString() << std::endl;
-        return 1;
-    }
-
     auto family_s = args["-F"].asString();
     int family{0};
-    uvw::Addr addr{};
     if (family_s == "inet") {
         family = AF_INET;
     } else if (family_s == "inet6") {
@@ -221,19 +217,31 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    addrinfo *node{target_resolved.second.get()};
-    while (node && node->ai_family != family) {
-        node = node->ai_next;
-    }
-    if (!node) {
-        std::cerr << "name did not resolve to valid IP address for this inet family" << std::endl;
-        return 1;
-    }
+    std::vector<std::string> target_list;
+    std::vector<std::string> raw_target_list = split(args["TARGET"].asString(), ',');
+    auto request = loop->resource<uvw::GetAddrInfoReq>();
+    for (uint i = 0; i < raw_target_list.size(); i++) {
+        uvw::Addr addr;
+        auto target_resolved = request->addrInfoSync(raw_target_list[i], args["-p"].asString());
+        if (!target_resolved.first) {
+            std::cerr << "unable to resolve target address: " << raw_target_list[i] << std::endl;
+            return 1;
+        }
+        addrinfo *node{target_resolved.second.get()};
+        while (node && node->ai_family != family) {
+            node = node->ai_next;
+        }
+        if (!node) {
+            std::cerr << "name did not resolve to valid IP address for this inet family" << std::endl;
+            return 1;
+        }
 
-    if (family == AF_INET) {
-        addr = uvw::details::address<uvw::IPv4>((struct sockaddr_in *)node->ai_addr);
-    } else if (family == AF_INET6) {
-        addr = uvw::details::address<uvw::IPv6>((struct sockaddr_in6 *)node->ai_addr);
+        if (family == AF_INET) {
+            addr = uvw::details::address<uvw::IPv4>((struct sockaddr_in *)node->ai_addr);
+        } else if (family == AF_INET6) {
+            addr = uvw::details::address<uvw::IPv6>((struct sockaddr_in6 *)node->ai_addr);
+        }
+        target_list.push_back(addr.ip);
     }
 
     auto config = std::make_shared<Config>(
@@ -294,7 +302,7 @@ int main(int argc, char *argv[])
     auto traf_config = std::make_shared<TrafGenConfig>();
     traf_config->batch_count = b_count;
     traf_config->family = family;
-    traf_config->target_address = addr.ip;
+    traf_config->target_address = target_list;
     traf_config->port = static_cast<unsigned int>(args["-p"].asLong());
     traf_config->s_delay = s_delay;
     traf_config->protocol = proto;
@@ -362,7 +370,20 @@ int main(int argc, char *argv[])
     sigterm->start(SIGTERM);
 
     if (config->verbosity()) {
-        std::cout << "flaming target " << args["TARGET"] << " (" << traf_config->target_address << ") on port "
+        std::cout << "flaming target " << args["TARGET"] << " (";
+        for (uint i = 0; i < 3; i++) {
+            std::cout << traf_config->target_address[i];
+            if (i == traf_config->target_address.size()-1) {
+                break;
+            }
+            else {
+                std::cout << ", ";
+            }
+        }
+        if (traf_config->target_address.size() > 3) {
+            std::cout << " and " << traf_config->target_address.size()-3 << " more";
+        }
+        std::cout << ") on port "
                   << args["-p"].asLong()
                   << " with " << c_count << " concurrent generators, each sending " << b_count
                   << " queries every " << s_delay << "ms on protocol " << args["-P"].asString()
