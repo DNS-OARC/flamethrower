@@ -1,31 +1,29 @@
-FROM ubuntu:18.04
+FROM ubuntu:disco AS build
 
-ENV BUILD_DEPS "cmake make g++ wget ca-certificates libgetopt-complete-perl automake libtool pkg-config clang"
-ENV RUNTIME_DEPS "libssl-dev libgnutls28-dev"
+ENV BUILD_DEPS "g++ cmake make libldns-dev libuv1-dev libgnutls28-dev pkgconf"
 
-# Install build and runtime dependencies.
-RUN apt-get update \
-    && apt-get install -yqq --no-install-recommends \
-    ${BUILD_DEPS} \
-    ${RUNTIME_DEPS} \
-    && rm -rf /var/lib/apt
+RUN \
+    apt-get update && \
+    apt-get install --yes --no-install-recommends ${BUILD_DEPS}
 
-ENV FLAME_HOME "/opt/flame"
+COPY . /src
 
-RUN mkdir -p ${FLAME_HOME} /usr/local/bin
+RUN \
+    mkdir /tmp/build && \
+    cd /tmp/build && \
+    cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo /src && \
+    make all tests && \
+    ./tests
 
-COPY . ${FLAME_HOME}
+FROM ubuntu:disco AS runtime
 
-# Setup some more deps
-RUN /bin/bash ${FLAME_HOME}/ci/install-ldns.sh "container" && rm -rf /tmp/*
-RUN /bin/bash ${FLAME_HOME}/ci/install-libuv.sh "container" && rm -rf /tmp/*
+ENV RUNTIME_DEPS "libldns2 libuv1"
 
-# Build flamethrower
-RUN cd ${FLAME_HOME} \
-    && mkdir build \
-    && cd build \
-    && cmake .. \
-    && make \
-    && mv flame /usr/local/bin/flame
+RUN \
+    apt-get update && \
+    apt-get install --yes --no-install-recommends ${RUNTIME_DEPS} && \
+    rm -rf /var/lib/apt
+
+COPY --from=build /tmp/build/flame /usr/local/bin/flame
 
 ENTRYPOINT [ "/usr/local/bin/flame" ]
