@@ -25,7 +25,7 @@ static const char USAGE[] =
       flame [-q QCOUNT] [-c TCOUNT] [-p PORT] [-d DELAY_MS] [-r RECORD] [-T QTYPE] [-o FILE]
             [-l LIMIT_SECS] [-t TIMEOUT] [-F FAMILY] [-f FILE] [-n LOOP] [-P PROTOCOL]
             [-Q QPS] [-g GENERATOR] [-v VERBOSITY] [-R] [--class CLASS] [--qps-flow SPEC]
-            [--dnssec]
+            [--dnssec] [--targets FILE]
             TARGET [GENOPTS]...
       flame (-h | --help)
       flame --version
@@ -56,6 +56,7 @@ static const char USAGE[] =
       -o FILE          Metrics output file, JSON format.
       -v VERBOSITY     How verbose output should be, 0 is silent [default: 1]
       -R               Randomize the query list before sending [default: false]
+      --targets FILE   Get the list of TARGETs from the given file, one line per host or IP
       --dnssec         Set DO flag in EDNS.
 
      Generators:
@@ -217,8 +218,24 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    std::vector<std::string> raw_target_list;
+    if (args["TARGET"].asString() == "file" && args["--targets"]) {
+        std::ifstream inFile(args["--targets"].asString());
+        if (!inFile) {
+            std::cerr << "couldn't open file:" << std::endl;
+            exit(1);
+        }
+
+        std::string line;
+        while (getline(inFile, line)) {
+            raw_target_list.push_back(line);
+        }
+        inFile.close();
+    } else {
+        raw_target_list = split(args["TARGET"].asString(), ',');
+    }
+
     std::vector<std::string> target_list;
-    std::vector<std::string> raw_target_list = split(args["TARGET"].asString(), ',');
     auto request = loop->resource<uvw::GetAddrInfoReq>();
     for (uint i = 0; i < raw_target_list.size(); i++) {
         uvw::Addr addr;
@@ -232,7 +249,7 @@ int main(int argc, char *argv[])
             node = node->ai_next;
         }
         if (!node) {
-            std::cerr << "name did not resolve to valid IP address for this inet family" << std::endl;
+            std::cerr << "name did not resolve to valid IP address for this inet family: " << raw_target_list[i] << std::endl;
             return 1;
         }
 
