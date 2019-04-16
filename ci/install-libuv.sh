@@ -1,5 +1,11 @@
 #!/bin/sh
 
+SUDO=sudo
+
+if [[ ${1} == "container" ]]; then
+    SUDO=""
+fi
+
 VERSION=1.25.0
 ARCHIVE="https://github.com/libuv/libuv/archive/v${VERSION}.tar.gz"
 
@@ -13,5 +19,5 @@ cd "libuv-${VERSION}"
 ./autogen.sh
 ./configure
 make
-sudo make install
-sudo ldconfig
+${SUDO} make install
+${SUDO} ldconfig
