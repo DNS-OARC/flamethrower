@@ -15,7 +15,7 @@ Overview
 
 Flamethrower is a small, fast, configurable tool for functional testing, benchmarking, and stress testing DNS servers and networks. It supports IPv4, IPv6, UDP and TCP, and has a modular system for generating queries used in the tests.
 
-It was built as an alternative to dnsperf (https://nominum.com/measurement-tools/), and many of the command line options are compatible. 
+It was built as an alternative to dnsperf (https://nominum.com/measurement-tools/), and many of the command line options are compatible.
 
 Dependencies
 ------------
@@ -30,11 +30,20 @@ Dependencies
 Build
 -----
 
-CMake based, required libuv and ldns.
+CMake based, requires libuv and ldns.
 ```
 mkdir build; cd build
 cmake ..
 make
+```
+
+Docker based, requires a recent version of docker.
+```
+org="myorg"
+image="myflame"
+tag="latest"
+docker build --network host -t ${org}/${image}:${tag} -f Dockerfile .
+docker run --rm -it --net host ${org}/${image}:${tag} --help
 ```
 
 Usage
