@@ -389,7 +389,7 @@ int main(int argc, char *argv[])
     sigterm->start(SIGTERM);
 
     if (config->verbosity()) {
-        std::cout << "flaming target " << args["TARGET"] << " (";
+        std::cout << "flaming target(s) [";
         for (uint i = 0; i < 3; i++) {
             std::cout << traf_config->target_address[i];
             if (i == traf_config->target_address.size()-1) {
@@ -400,9 +400,9 @@ int main(int argc, char *argv[])
             }
         }
         if (traf_config->target_address.size() > 3) {
-            std::cout << " and " << traf_config->target_address.size()-3 << " more";
+            std::cout << "and " << traf_config->target_address.size()-3 << " more";
         }
-        std::cout << ") on port "
+        std::cout << "] on port "
                   << args["-p"].asLong()
                   << " with " << c_count << " concurrent generators, each sending " << b_count
                   << " queries every " << s_delay << "ms on protocol " << args["-P"].asString()
