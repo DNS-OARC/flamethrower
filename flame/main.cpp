@@ -37,8 +37,8 @@ static const char USAGE[] =
     TARGET may also be the special value "file", in which case the --targets option needs to also be specified.
 
     Options:
-      -h --help        Show this screen.
-      --version        Show version.
+      -h --help        Show this screen
+      --version        Show version
       --class CLASS    Default query class, defaults to IN. May also be CH [default: IN]
       -c TCOUNT        Number of concurrent traffic generators per process [default: 10]
       -d DELAY_MS      ms delay between each traffic generator's query [default: 1]
