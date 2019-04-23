@@ -78,6 +78,11 @@ Flame target with random labels:
 flame target.test.com -g randomlabel lblsize=10 lblcount=4 count=1000
 ```
 
+Flame multiple target at once, reading the list from a file:
+```
+flame file --targets myresolvers.txt
+```
+
 Detailed Features
 -----------------
 

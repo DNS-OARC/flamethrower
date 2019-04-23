@@ -34,6 +34,8 @@ static const char USAGE[] =
     they will be sent queries in a strict round robin fashion across all concurrent generators. All targets must
     share the same port, protocol, and internet family.
 
+    TARGET may also be the special value "file", in which case the --targets option needs to also be specified.
+
     Options:
       -h --help        Show this screen.
       --version        Show version.
