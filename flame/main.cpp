@@ -55,11 +55,11 @@ static const char USAGE[] =
       -F FAMILY        Internet family (inet/inet6) [default: inet]
       -P PROTOCOL      Protocol to use (udp/tcp/tcptls) [default: udp]
       -g GENERATOR     Generate queries with the given generator [default: static]
-      -o FILE          Metrics output file, JSON format.
+      -o FILE          Metrics output file, JSON format
       -v VERBOSITY     How verbose output should be, 0 is silent [default: 1]
       -R               Randomize the query list before sending [default: false]
       --targets FILE   Get the list of TARGETs from the given file, one line per host or IP
-      --dnssec         Set DO flag in EDNS.
+      --dnssec         Set DO flag in EDNS
 
      Generators:
 
