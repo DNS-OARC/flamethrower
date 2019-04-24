@@ -223,9 +223,9 @@ int main(int argc, char *argv[])
     std::vector<std::string> raw_target_list;
     if (args["TARGET"].asString() == "file" && args["--targets"]) {
         std::ifstream inFile(args["--targets"].asString());
-        if (!inFile) {
-            std::cerr << "couldn't open file:" << std::endl;
-            exit(1);
+        if (!inFile.is_open()) {
+            std::cerr << "couldn't open targets file: " << args["--targets"].asString() << std::endl;
+            return 1;
         }
 
         std::string line;
@@ -244,6 +244,9 @@ int main(int argc, char *argv[])
         auto target_resolved = request->addrInfoSync(raw_target_list[i], args["-p"].asString());
         if (!target_resolved.first) {
             std::cerr << "unable to resolve target address: " << raw_target_list[i] << std::endl;
+            if (raw_target_list[i] == "file") {
+                std::cerr << "(did you mean to include --targets?)" << std::endl;
+            }
             return 1;
         }
         addrinfo *node{target_resolved.second.get()};
