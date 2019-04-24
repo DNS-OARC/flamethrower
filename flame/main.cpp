@@ -25,14 +25,20 @@ static const char USAGE[] =
       flame [-q QCOUNT] [-c TCOUNT] [-p PORT] [-d DELAY_MS] [-r RECORD] [-T QTYPE] [-o FILE]
             [-l LIMIT_SECS] [-t TIMEOUT] [-F FAMILY] [-f FILE] [-n LOOP] [-P PROTOCOL]
             [-Q QPS] [-g GENERATOR] [-v VERBOSITY] [-R] [--class CLASS] [--qps-flow SPEC]
-            [--dnssec]
+            [--dnssec] [--targets FILE]
             TARGET [GENOPTS]...
       flame (-h | --help)
       flame --version
 
+    TARGET may be a hostname, an IP address, or a comma separated list of either. If multiple targets are specified,
+    they will be sent queries in a strict round robin fashion across all concurrent generators. All targets must
+    share the same port, protocol, and internet family.
+
+    TARGET may also be the special value "file", in which case the --targets option needs to also be specified.
+
     Options:
-      -h --help        Show this screen.
-      --version        Show version.
+      -h --help        Show this screen
+      --version        Show version
       --class CLASS    Default query class, defaults to IN. May also be CH [default: IN]
       -c TCOUNT        Number of concurrent traffic generators per process [default: 10]
       -d DELAY_MS      ms delay between each traffic generator's query [default: 1]
@@ -49,10 +55,11 @@ static const char USAGE[] =
       -F FAMILY        Internet family (inet/inet6) [default: inet]
       -P PROTOCOL      Protocol to use (udp/tcp/tcptls) [default: udp]
       -g GENERATOR     Generate queries with the given generator [default: static]
-      -o FILE          Metrics output file, JSON format.
+      -o FILE          Metrics output file, JSON format
       -v VERBOSITY     How verbose output should be, 0 is silent [default: 1]
       -R               Randomize the query list before sending [default: false]
-      --dnssec         Set DO flag in EDNS.
+      --targets FILE   Get the list of TARGETs from the given file, one line per host or IP
+      --dnssec         Set DO flag in EDNS
 
      Generators:
 
@@ -202,16 +209,8 @@ int main(int argc, char *argv[])
 
     auto runtime_limit = args["-l"].asLong();
 
-    auto request = loop->resource<uvw::GetAddrInfoReq>();
-    auto target_resolved = request->addrInfoSync(args["TARGET"].asString(), args["-p"].asString());
-    if (!target_resolved.first) {
-        std::cerr << "unable to resolve target address: " << args["TARGET"].asString() << std::endl;
-        return 1;
-    }
-
     auto family_s = args["-F"].asString();
     int family{0};
-    uvw::Addr addr{};
     if (family_s == "inet") {
         family = AF_INET;
     } else if (family_s == "inet6") {
@@ -221,19 +220,50 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    addrinfo *node{target_resolved.second.get()};
-    while (node && node->ai_family != family) {
-        node = node->ai_next;
-    }
-    if (!node) {
-        std::cerr << "name did not resolve to valid IP address for this inet family" << std::endl;
-        return 1;
+    std::vector<std::string> raw_target_list;
+    if (args["TARGET"].asString() == "file" && args["--targets"]) {
+        std::ifstream inFile(args["--targets"].asString());
+        if (!inFile.is_open()) {
+            std::cerr << "couldn't open targets file: " << args["--targets"].asString() << std::endl;
+            return 1;
+        }
+
+        std::string line;
+        while (getline(inFile, line)) {
+            raw_target_list.push_back(line);
+        }
+        inFile.close();
+    } else {
+        raw_target_list = split(args["TARGET"].asString(), ',');
     }
 
-    if (family == AF_INET) {
-        addr = uvw::details::address<uvw::IPv4>((struct sockaddr_in *)node->ai_addr);
-    } else if (family == AF_INET6) {
-        addr = uvw::details::address<uvw::IPv6>((struct sockaddr_in6 *)node->ai_addr);
+    std::vector<std::string> target_list;
+    auto request = loop->resource<uvw::GetAddrInfoReq>();
+    for (uint i = 0; i < raw_target_list.size(); i++) {
+        uvw::Addr addr;
+        auto target_resolved = request->addrInfoSync(raw_target_list[i], args["-p"].asString());
+        if (!target_resolved.first) {
+            std::cerr << "unable to resolve target address: " << raw_target_list[i] << std::endl;
+            if (raw_target_list[i] == "file") {
+                std::cerr << "(did you mean to include --targets?)" << std::endl;
+            }
+            return 1;
+        }
+        addrinfo *node{target_resolved.second.get()};
+        while (node && node->ai_family != family) {
+            node = node->ai_next;
+        }
+        if (!node) {
+            std::cerr << "name did not resolve to valid IP address for this inet family: " << raw_target_list[i] << std::endl;
+            return 1;
+        }
+
+        if (family == AF_INET) {
+            addr = uvw::details::address<uvw::IPv4>((struct sockaddr_in *)node->ai_addr);
+        } else if (family == AF_INET6) {
+            addr = uvw::details::address<uvw::IPv6>((struct sockaddr_in6 *)node->ai_addr);
+        }
+        target_list.push_back(addr.ip);
     }
 
     auto config = std::make_shared<Config>(
@@ -294,7 +324,7 @@ int main(int argc, char *argv[])
     auto traf_config = std::make_shared<TrafGenConfig>();
     traf_config->batch_count = b_count;
     traf_config->family = family;
-    traf_config->target_address = addr.ip;
+    traf_config->target_address = target_list;
     traf_config->port = static_cast<unsigned int>(args["-p"].asLong());
     traf_config->s_delay = s_delay;
     traf_config->protocol = proto;
@@ -362,7 +392,20 @@ int main(int argc, char *argv[])
     sigterm->start(SIGTERM);
 
     if (config->verbosity()) {
-        std::cout << "flaming target " << args["TARGET"] << " (" << traf_config->target_address << ") on port "
+        std::cout << "flaming target(s) [";
+        for (uint i = 0; i < 3; i++) {
+            std::cout << traf_config->target_address[i];
+            if (i == traf_config->target_address.size()-1) {
+                break;
+            }
+            else {
+                std::cout << ", ";
+            }
+        }
+        if (traf_config->target_address.size() > 3) {
+            std::cout << "and " << traf_config->target_address.size()-3 << " more";
+        }
+        std::cout << "] on port "
                   << args["-p"].asLong()
                   << " with " << c_count << " concurrent generators, each sending " << b_count
                   << " queries every " << s_delay << "ms on protocol " << args["-P"].asString()
