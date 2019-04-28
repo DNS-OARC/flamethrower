@@ -30,15 +30,23 @@ enum class Protocol {
 };
 
 struct TrafGenConfig {
-    std::string target_address;
+    std::vector<std::string> target_address;
+    unsigned int _current_target{0};
     int family{0};
     unsigned int port{53};
     int r_timeout{3};
     long s_delay{1};
     long batch_count{10};
     Protocol protocol{Protocol::UDP};
-    struct sockaddr_storage sa;
-    socklen_t salen;
+    const std::string& next_target_address()
+    {
+        const std::string& next = target_address[_current_target];
+
+        _current_target++;
+        if (_current_target >= target_address.size())
+            _current_target = 0;
+        return next;
+    }
 };
 
 class TrafGen
