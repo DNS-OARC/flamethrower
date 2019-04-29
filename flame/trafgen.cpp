@@ -443,10 +443,13 @@ void TrafGen::start_quic()
         _metrics->net_error();
     });
 
+    socklen_t salen{0};
     if (_traf_config->family == AF_INET) {
         _udp_handle->bind<uvw::IPv4>("0.0.0.0", 0);
+        salen = sizeof(sockaddr_in);
     } else {
         _udp_handle->bind<uvw::IPv6>("::0", 0, uvw::UDPHandle::Bind::IPV6ONLY);
+        salen = sizeof(sockaddr_in6);
     }
 
     _metrics->trafgen_id(_udp_handle->sock().port);
@@ -458,7 +461,7 @@ void TrafGen::start_quic()
     sa.ss_family = _traf_config->family;
     inet_pton(sa.ss_family, addr.data(), sa_ptr->sa_data);
     if ((ret = quicly_connect(&q_conn, &q_ctx, addr.data(),
-                              (struct sockaddr*)&sa, sa_ptr->sa_len, &q_next_cid, NULL, NULL)) != 0) {
+                              (struct sockaddr*)&sa, salen, &q_next_cid, NULL, NULL)) != 0) {
         throw std::runtime_error("quicly connect failed: " + std::to_string(ret));
     }
 
