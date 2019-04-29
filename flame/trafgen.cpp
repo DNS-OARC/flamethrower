@@ -432,7 +432,7 @@ void TrafGen::start_quic()
         .cipher_suites = ptls_openssl_cipher_suites,
     };
     q_stream_open = {q_on_stream_open};
-    q_ctx = quicly_default_context;
+    q_ctx = quicly_spec_context;
     q_ctx.tls = &q_tlsctx;
     quicly_amend_ptls_context(q_ctx.tls);
     q_ctx.stream_open = &q_stream_open;
