@@ -20,7 +20,7 @@ It was built as an alternative to dnsperf (https://nominum.com/measurement-tools
 Dependencies
 ------------
 
-* CMake >= 3.5
+* CMake >= 3.8
 * Linux or OSX
 * libuv >= 1.23.0
 * libldns >= 1.7.0
