@@ -9,10 +9,19 @@
 #include "trafgen.h"
 #include "tcptlssession.h"
 
-#include <ldns/rbtree.h>
+// courtesy of https://github.com/DanieleDeSensi/peafowl MIT license
+struct dns_header {
+    u_int16_t tr_id;
+    u_int16_t flags;
+    u_int16_t quest_count;
+    u_int16_t answ_count;
+    u_int16_t auth_rrs;
+    u_int16_t add_rrs;
+} __attribute__((packed));
 
-#include <ldns/host2wire.h>
-#include <ldns/wire2host.h>
+static inline uint8_t getBits(uint16_t x, uint p, uint n) {
+    return (x >> (p + 1 - n)) & ~(~0 << n);
+}
 
 TrafGen::TrafGen(std::shared_ptr<uvw::Loop> l,
     std::shared_ptr<Metrics> s,
@@ -42,27 +51,31 @@ TrafGen::TrafGen(std::shared_ptr<uvw::Loop> l,
 void TrafGen::process_wire(const char data[], size_t len)
 {
 
-    ldns_pkt *query{0};
-    int r = ldns_wire2pkt(&query, (uint8_t *)data, len);
-    if (r != LDNS_STATUS_OK) {
+    if (len <= 12) {
         _metrics->bad_receive(_in_flight.size());
-        ldns_pkt_free(query);
         return;
     }
 
-    uint16_t id = ldns_pkt_id(query);
+    struct dns_header *dns_header = (struct dns_header *)(data);
+    dns_header->tr_id = ntohs(dns_header->tr_id);
+    dns_header->flags = ntohs(dns_header->flags);
+    dns_header->quest_count = ntohs(dns_header->quest_count);
+    dns_header->answ_count = ntohs(dns_header->answ_count);
+    dns_header->auth_rrs = ntohs(dns_header->auth_rrs);
+    dns_header->add_rrs = ntohs(dns_header->add_rrs);
+
+    uint16_t id = dns_header->tr_id;
     if (_in_flight.find(id) == _in_flight.end()) {
         std::cerr << "untracked " << id << std::endl;
         _metrics->bad_receive(_in_flight.size());
-        ldns_pkt_free(query);
         return;
     }
 
-    _metrics->receive(_in_flight[id].send_time, ldns_pkt_get_rcode(query), _in_flight.size());
+    uint8_t rcode = getBits(dns_header->flags, 3, 4);
+    _metrics->receive(_in_flight[id].send_time, rcode, _in_flight.size());
     _in_flight.erase(id);
     _free_id_list.push_back(id);
 
-    ldns_pkt_free(query);
 }
 
 void TrafGen::start_udp()
