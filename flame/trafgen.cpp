@@ -9,20 +9,6 @@
 #include "trafgen.h"
 #include "tcptlssession.h"
 
-// courtesy of https://github.com/DanieleDeSensi/peafowl MIT license
-struct dns_header {
-    u_int16_t tr_id;
-    u_int16_t flags;
-    u_int16_t quest_count;
-    u_int16_t answ_count;
-    u_int16_t auth_rrs;
-    u_int16_t add_rrs;
-} __attribute__((packed));
-
-static inline uint8_t getBits(uint16_t x, uint p, uint n) {
-    return (x >> (p + 1 - n)) & ~(~0 << n);
-}
-
 TrafGen::TrafGen(std::shared_ptr<uvw::Loop> l,
     std::shared_ptr<Metrics> s,
     std::shared_ptr<Config> c,
@@ -56,22 +42,17 @@ void TrafGen::process_wire(const char data[], size_t len)
         return;
     }
 
-    struct dns_header *dns_header = (struct dns_header *)(data);
-    dns_header->tr_id = ntohs(dns_header->tr_id);
-    dns_header->flags = ntohs(dns_header->flags);
-    dns_header->quest_count = ntohs(dns_header->quest_count);
-    dns_header->answ_count = ntohs(dns_header->answ_count);
-    dns_header->auth_rrs = ntohs(dns_header->auth_rrs);
-    dns_header->add_rrs = ntohs(dns_header->add_rrs);
+    // The first 2 bytes are the query ID.
+    u_int16_t id = ntohs(*(u_int16_t *)data);
+    // The response code is in the low-order 4 bits of the flags header field.
+    uint8_t rcode = data[3] & 0xf;
 
-    uint16_t id = dns_header->tr_id;
     if (_in_flight.find(id) == _in_flight.end()) {
         std::cerr << "untracked " << id << std::endl;
         _metrics->bad_receive(_in_flight.size());
         return;
     }
 
-    uint8_t rcode = getBits(dns_header->flags, 3, 4);
     _metrics->receive(_in_flight[id].send_time, rcode, _in_flight.size());
     _in_flight.erase(id);
     _free_id_list.push_back(id);
