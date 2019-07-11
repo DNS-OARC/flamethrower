@@ -18,7 +18,7 @@ Flamethrower is a small, fast, configurable tool for functional testing, benchma
 Dependencies
 ------------
 
-* CMake >= 3.5
+* CMake >= 3.8
 * Linux or OSX
 * libuv >= 1.23.0
 * libldns >= 1.7.0

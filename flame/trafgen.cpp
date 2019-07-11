@@ -15,11 +15,6 @@
 #include <quicly/defaults.h>
 #endif
 
-#include <ldns/rbtree.h>
-
-#include <ldns/host2wire.h>
-#include <ldns/wire2host.h>
-
 TrafGen::TrafGen(std::shared_ptr<uvw::Loop> l,
     std::shared_ptr<Metrics> s,
     std::shared_ptr<Config> c,
@@ -48,27 +43,26 @@ TrafGen::TrafGen(std::shared_ptr<uvw::Loop> l,
 void TrafGen::process_wire(const char data[], size_t len)
 {
 
-    ldns_pkt *query{0};
-    int r = ldns_wire2pkt(&query, (uint8_t *)data, len);
-    if (r != LDNS_STATUS_OK) {
+    if (len <= 12) {
         _metrics->bad_receive(_in_flight.size());
-        ldns_pkt_free(query);
         return;
     }
 
-    uint16_t id = ldns_pkt_id(query);
+    // The first 2 bytes are the query ID.
+    u_int16_t id = ntohs(*(u_int16_t *)data);
+    // The response code is in the low-order 4 bits of the flags header field.
+    uint8_t rcode = data[3] & 0xf;
+
     if (_in_flight.find(id) == _in_flight.end()) {
         std::cerr << "untracked " << id << std::endl;
         _metrics->bad_receive(_in_flight.size());
-        ldns_pkt_free(query);
         return;
     }
 
-    _metrics->receive(_in_flight[id].send_time, ldns_pkt_get_rcode(query), _in_flight.size());
+    _metrics->receive(_in_flight[id].send_time, rcode, _in_flight.size());
     _in_flight.erase(id);
     _free_id_list.push_back(id);
 
-    ldns_pkt_free(query);
 }
 
 void TrafGen::start_udp()
