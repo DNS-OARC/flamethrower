@@ -31,7 +31,7 @@ public:
 
     TokenBucket(const uint64_t rate, const uint64_t burstSize) {
         time_ = 0;
-        timePerToken_ = 1000000 / rate;
+        timePerToken_ = 1000 / rate;
         timePerBurst_ = burstSize * timePerToken_;
     }
 
@@ -48,11 +48,7 @@ public:
         return *this;
     }
 
-    bool consume(const uint64_t tokens) {
-        const uint64_t now =
-                std::chrono::duration_cast<std::chrono::microseconds>(
-                        std::chrono::steady_clock::now().time_since_epoch())
-                        .count();
+    bool consume(const uint64_t tokens, const uint64_t now) {
         const uint64_t timeNeeded =
                 tokens * timePerToken_.load(std::memory_order_relaxed);
         const uint64_t minTime =

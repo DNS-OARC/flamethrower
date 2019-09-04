@@ -117,7 +117,7 @@ void TrafGen::start_tcp_session()
                 // out of ids, have to limit
                 break;
             }
-            if (_rate_limit && !_rate_limit->consume(1))
+            if (_rate_limit && !_rate_limit->consume(1, this->_loop->now().count()))
                 break;
             id = _free_id_list.back();
             _free_id_list.pop_back();
@@ -259,7 +259,7 @@ void TrafGen::udp_send()
     }
     uint16_t id{0};
     for (int i = 0; i < _traf_config->batch_count; i++) {
-        if (_rate_limit && !_rate_limit->consume(1))
+        if (_rate_limit && !_rate_limit->consume(1, _loop->now().count()))
             return;
         if (_free_id_list.size() == 0) {
             std::cerr << "max in flight reached" << std::endl;

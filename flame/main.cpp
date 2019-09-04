@@ -104,7 +104,7 @@ static const char USAGE[] =
 
 )";
 
-void parse_flowspec(std::string spec, std::queue<std::pair<uint64_t, uint64_t>> &result, int verbosity)
+void parse_flowspec(std::string spec, std::queue<std::pair<uint64_t, uint64_t>> &result, int verbosity, long c_count)
 {
 
     std::vector<std::string> groups = split(spec, ';');
@@ -113,13 +113,19 @@ void parse_flowspec(std::string spec, std::queue<std::pair<uint64_t, uint64_t>> 
         if (verbosity > 1) {
             std::cout << "adding QPS flow: " << nums[0] << "qps, " << nums[1] << "ms" << std::endl;
         }
-        result.push(std::make_pair(std::stol(nums[0]), std::stol(nums[1])));
+        long want_r = std::stol(nums[0]);
+        if (want_r < c_count) {
+            std::cerr << "WARNING: QPS flow limit is less than concurrent senders, changing limit to " << c_count << std::endl;
+            want_r = c_count;
+        }
+        result.push(std::make_pair(want_r, std::stol(nums[1])));
     }
 }
 
 void flow_change(std::queue<std::pair<uint64_t, uint64_t>> qps_flow,
-    std::shared_ptr<TokenBucket> rl,
-    int verbosity)
+    std::vector<std::shared_ptr<TokenBucket>> rl_list,
+    int verbosity,
+    long c_count)
 {
     auto flow = qps_flow.front();
     qps_flow.pop();
@@ -131,14 +137,16 @@ void flow_change(std::queue<std::pair<uint64_t, uint64_t>> qps_flow,
             std::cout << "QPS flow now " << flow.first << " until completion" << std::endl;
         }
     }
-    *rl = TokenBucket(flow.first, flow.first);
+    for (auto &rl : rl_list) {
+        *rl = TokenBucket(flow.first / c_count, flow.first / c_count);
+    }
     if (qps_flow.size() == 0)
         return;
     auto loop = uvw::Loop::getDefault();
     auto qps_timer = loop->resource<uvw::TimerHandle>();
-    qps_timer->on<uvw::TimerEvent>([qps_flow, rl, verbosity](const auto &event, auto &handle) {
+    qps_timer->on<uvw::TimerEvent>([qps_flow, rl_list, verbosity, c_count](const auto& event, auto& handle) {
         handle.stop();
-        flow_change(qps_flow, rl, verbosity);
+        flow_change(qps_flow, rl_list, verbosity, c_count);
     });
     qps_timer->start(uvw::TimerHandle::Time{flow.second}, uvw::TimerHandle::Time{0});
 }
@@ -266,10 +274,15 @@ int main(int argc, char *argv[])
         target_list.push_back(addr.ip);
     }
 
+    long want_r_limit = args["-Q"].asLong();
+    if (want_r_limit && want_r_limit < c_count) {
+        std::cerr << "WARNING: QPS limit is less than concurrent senders, changing limit to " << c_count << std::endl;
+        want_r_limit = c_count;
+    }
     auto config = std::make_shared<Config>(
         args["-v"].asLong(),
         output_file,
-        args["-Q"].asLong());
+        want_r_limit);
 
     std::shared_ptr<QueryGenerator> qgen;
     try {
@@ -312,13 +325,9 @@ int main(int argc, char *argv[])
     auto metrics_mgr = std::make_shared<MetricsMgr>(loop, config, cmdline);
 
     std::queue<std::pair<uint64_t, uint64_t>> qps_flow;
-    std::shared_ptr<TokenBucket> rl;
-    if (config->rate_limit()) {
-        rl = std::make_shared<TokenBucket>(config->rate_limit(), config->rate_limit());
-    } else if (args["--qps-flow"]) {
-        rl = std::make_shared<TokenBucket>();
-        parse_flowspec(args["--qps-flow"].asString(), qps_flow, config->verbosity());
-        flow_change(qps_flow, rl, config->verbosity());
+    std::vector<std::shared_ptr<TokenBucket>> rl_list;
+    if (args["--qps-flow"]) {
+        parse_flowspec(args["--qps-flow"].asString(), qps_flow, config->verbosity(), c_count);
     }
 
     auto traf_config = std::make_shared<TrafGenConfig>();
@@ -332,6 +341,13 @@ int main(int argc, char *argv[])
 
     std::vector<std::shared_ptr<TrafGen>> throwers;
     for (auto i = 0; i < c_count; i++) {
+        std::shared_ptr<TokenBucket> rl;
+        if (config->rate_limit()) {
+            rl = std::make_shared<TokenBucket>(config->rate_limit() / c_count, config->rate_limit() / c_count);
+        } else if (args["--qps-flow"]) {
+            rl = std::make_shared<TokenBucket>();
+            rl_list.push_back(rl);
+        }
         throwers.push_back(std::make_shared<TrafGen>(loop,
             metrics_mgr->create_trafgen_metrics(),
             config,
@@ -339,6 +355,9 @@ int main(int argc, char *argv[])
             qgen,
             rl));
         throwers[i]->start();
+    }
+    if (args["--qps-flow"]) {
+        flow_change(qps_flow, rl_list, config->verbosity(), c_count);
     }
 
     auto have_in_flight = [&throwers]() {
