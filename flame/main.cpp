@@ -138,7 +138,7 @@ void flow_change(std::queue<std::pair<uint64_t, uint64_t>> qps_flow,
         }
     }
     for (auto &rl : rl_list) {
-        *rl = TokenBucket(flow.first / c_count, flow.first / c_count);
+        *rl = TokenBucket(flow.first / c_count);
     }
     if (qps_flow.size() == 0)
         return;
@@ -343,7 +343,7 @@ int main(int argc, char *argv[])
     for (auto i = 0; i < c_count; i++) {
         std::shared_ptr<TokenBucket> rl;
         if (config->rate_limit()) {
-            rl = std::make_shared<TokenBucket>(config->rate_limit() / c_count, config->rate_limit() / c_count);
+            rl = std::make_shared<TokenBucket>(config->rate_limit() / c_count);
         } else if (args["--qps-flow"]) {
             rl = std::make_shared<TokenBucket>();
             rl_list.push_back(rl);
@@ -432,6 +432,10 @@ int main(int argc, char *argv[])
         std::cout << "query generator [" << qgen->name() << "] contains " << qgen->size() << " record(s)" << std::endl;
         if (args["-R"].asBool()) {
             std::cout << "query list randomized" << std::endl;
+        }
+        if (config->rate_limit()) {
+            std::cout << "rate limit @ " << config->rate_limit() << " QPS (" << (config->rate_limit() / c_count) <<
+            " QPS per concurrent sender)" << std::endl;
         }
     }
 

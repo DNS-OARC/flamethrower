@@ -1,83 +1,40 @@
-/*
-Copyright (c) 2016 Erik Rigtorp <erik@rigtorp.se>
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
- */
 
 #pragma once
 
-#include <atomic>
 #include <chrono>
+#include <uvw/loop.hpp>
 
 class TokenBucket {
 public:
-    TokenBucket() : time_(0), timePerToken_(0), timePerBurst_(0) {}
+    TokenBucket() : rate_qps_(0), token_wallet_(0), lastFill_ms_(0) {}
 
-    TokenBucket(const uint64_t rate, const uint64_t burstSize) {
-        time_ = 0;
-        timePerToken_ = 1000 / rate;
-        timePerBurst_ = burstSize * timePerToken_;
-    }
+    TokenBucket(const uint64_t rate) : rate_qps_(rate), token_wallet_(0), lastFill_ms_(0) {}
 
-    TokenBucket(const TokenBucket &other) {
-        time_ = other.time_.load();
-        timePerToken_ = other.timePerToken_.load();
-        timePerBurst_ = other.timePerBurst_.load();
-    }
-
-    TokenBucket &operator=(const TokenBucket &other) {
-        time_ = other.time_.load();
-        timePerToken_ = other.timePerToken_.load();
-        timePerBurst_ = other.timePerBurst_.load();
-        return *this;
-    }
-
-    bool consume(const uint64_t tokens, const uint64_t now) {
-        const uint64_t timeNeeded =
-                tokens * timePerToken_.load(std::memory_order_relaxed);
-        const uint64_t minTime =
-                now - timePerBurst_.load(std::memory_order_relaxed);
-        uint64_t oldTime = time_.load(std::memory_order_relaxed);
-        uint64_t newTime = oldTime;
-
-        if (minTime > oldTime) {
-            newTime = minTime;
-        }
-
-        for (;;) {
-            newTime += timeNeeded;
-            if (newTime > now) {
+    bool consume(const uint64_t tokens, const uvw::Loop::Time now_ms) {
+        if (token_wallet_ < tokens) {
+            if (lastFill_ms_.count() == 0) {
+                token_wallet_ = rate_qps_;
+                lastFill_ms_ = now_ms;
+            }
+            else if (now_ms > lastFill_ms_) {
+                auto elapsed_ms = (now_ms - lastFill_ms_).count();
+                double add = (double)rate_qps_ * ((double)elapsed_ms / 1000.0);
+                if (token_wallet_ + add >= tokens) {
+                    token_wallet_ += add;
+                    lastFill_ms_ = now_ms;
+                }
+            }
+            if (token_wallet_ < tokens) {
                 return false;
             }
-            if (time_.compare_exchange_weak(oldTime, newTime,
-                                            std::memory_order_relaxed,
-                                            std::memory_order_relaxed)) {
-                return true;
-            }
-            newTime = oldTime;
         }
-
-        return false;
+        token_wallet_ -= tokens;
+        return true;
     }
 
 private:
-    std::atomic<uint64_t> time_;
-    std::atomic<uint64_t> timePerToken_;
-    std::atomic<uint64_t> timePerBurst_;
+    uint64_t rate_qps_;
+    uint64_t token_wallet_;
+    // milliseconds, based on uv_now()
+    uvw::Loop::Time lastFill_ms_;
 };
