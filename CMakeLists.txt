@@ -76,6 +76,7 @@ target_include_directories(flamecore
 
 target_link_libraries(flamecore
         PRIVATE ${LIBUV_LDFLAGS}
+        PRIVATE ${LIBUV_LIBRARIES}
         PRIVATE ${LIBLDNS_LDFLAGS}
         PRIVATE ${LIBLDNS_LIBRARIES}
         PRIVATE ${LIBGNUTLS_LDFLAGS}
@@ -89,6 +90,8 @@ add_executable(flame
 
 target_link_libraries(flame
         PRIVATE flamecore
+        PRIVATE ${LIBUV_LDFLAGS}
+        PRIVATE ${LIBUV_LIBRARIES}
         )
 
 add_executable(tests
