@@ -13,7 +13,6 @@ public:
     bool consume(const uint64_t tokens, const uvw::Loop::Time now_ms) {
         if (token_wallet_ < tokens) {
             if (lastFill_ms_.count() == 0) {
-                token_wallet_ = rate_qps_;
                 lastFill_ms_ = now_ms;
             }
             else if (now_ms > lastFill_ms_) {
@@ -35,6 +34,6 @@ public:
 private:
     uint64_t rate_qps_;
     uint64_t token_wallet_;
-    // milliseconds, based on uv_now()
+    // milliseconds, based on uv_now() http://docs.libuv.org/en/v1.x/loop.html#c.uv_now
     uvw::Loop::Time lastFill_ms_;
 };
