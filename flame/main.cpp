@@ -283,7 +283,7 @@ int main(int argc, char *argv[])
         uvw::Addr addr;
         struct http_parser_url parsed = {};
         std::string url = raw_target_list[i];
-        if(url.rfind("https://", 0) != 0 && proto == Protocol::HTTPS) {
+        if(url.rfind("https://", 0) != 0) {
             url.insert(0, "https://");
         }
         int ret = http_parser_parse_url(url.c_str(), strlen(url.c_str()), 0, &parsed);
