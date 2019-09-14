@@ -6,10 +6,16 @@
 #include <unordered_map>
 #include <vector>
 
+#include "flame.h"
 #include "config.h"
 #include "metrics.h"
 #include "query.h"
 #include "tcpsession.h"
+
+#ifdef QUIC_ENABLE
+#include "quicly.h"
+#include "quicly/streambuf.h"
+#endif
 
 #include <TokenBucket.h>
 #include <uvw.hpp>
@@ -18,6 +24,9 @@ enum class Protocol {
     UDP,
     TCP,
     TCPTLS,
+#ifdef QUIC_ENABLE
+    QUIC,
+#endif
 };
 
 struct TrafGenConfig {
@@ -32,6 +41,7 @@ struct TrafGenConfig {
     const std::string& next_target_address()
     {
         const std::string& next = target_address[_current_target];
+
         _current_target++;
         if (_current_target >= target_address.size())
             _current_target = 0;
@@ -65,6 +75,14 @@ class TrafGen
 
     bool _stopping;
 
+#ifdef QUIC_ENABLE
+    quicly_conn_t *q_conn;
+    quicly_stream_open_t q_stream_open;
+    quicly_context_t q_ctx;
+    quicly_cid_plaintext_t q_next_cid;
+    ptls_context_t q_tlsctx;
+#endif
+
     void handle_timeouts(bool force_reset = false);
 
     void process_wire(const char data[], size_t len);
@@ -74,6 +92,12 @@ class TrafGen
 
     void start_tcp_session();
     void start_wait_timer_for_tcp_finish();
+
+#ifdef QUIC_ENABLE
+    void start_quic();
+    void quic_send();
+    void q_process_msg(quicly_conn_t *conn, const uint8_t *src, size_t dgram_len);
+#endif
 
 public:
     TrafGen(std::shared_ptr<uvw::Loop> l,

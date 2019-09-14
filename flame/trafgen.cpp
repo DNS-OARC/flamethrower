@@ -1,4 +1,4 @@
-// Copyright 2017 NSONE, Inc
+// Copyright 2017-2019 NSONE, Inc
 
 #include <algorithm>
 #include <iostream>
@@ -8,6 +8,12 @@
 
 #include "trafgen.h"
 #include "tcptlssession.h"
+
+#ifdef QUIC_ENABLE
+#include <picotls.h>
+#include <picotls/openssl.h>
+#include <quicly/defaults.h>
+#endif
 
 TrafGen::TrafGen(std::shared_ptr<uvw::Loop> l,
     std::shared_ptr<Metrics> s,
@@ -246,6 +252,82 @@ void TrafGen::start_wait_timer_for_tcp_finish()
     _finish_session_timer->start(uvw::TimerHandle::Time{1}, uvw::TimerHandle::Time{50});
 }
 
+#ifdef QUIC_ENABLE
+void TrafGen::quic_send()
+{
+
+    if (_udp_handle.get() && !_udp_handle->active())
+        return;
+    if (_qgen->finished())
+        return;
+    if (_free_id_list.size() == 0) {
+        std::cerr << "max in flight reached" << std::endl;
+        return;
+    }
+
+    uint16_t id{0};
+    for (int i = 0; i < _traf_config->batch_count; i++) {
+        if (_rate_limit && !_rate_limit->consume(1))
+            return;
+        if (_free_id_list.size() == 0) {
+            std::cerr << "max in flight reached" << std::endl;
+            return;
+        }
+        id = _free_id_list.back();
+        _free_id_list.pop_back();
+        assert(_in_flight.find(id) == _in_flight.end());
+        auto qt = _qgen->next_udp(id);
+
+        quicly_stream_t *stream; /* we retain the opened stream via the on_stream_open callback */
+        quicly_open_stream(q_conn, &stream, 0);
+        if (!quicly_sendstate_is_open(&stream->sendstate))
+            return;
+
+        /* write data to send buffer */
+        quicly_streambuf_egress_write(stream, (void*)std::get<0>(qt).get(), std::get<1>(qt));
+        quicly_streambuf_egress_shutdown(stream);
+        // ???
+        // in UDP, this buffer gets freed by libuv after send. in quic, it gets copied internally to
+        // quic datagram, so this can be freed immediately
+
+        _metrics->send(std::get<1>(qt), 1, _in_flight.size());
+        _in_flight[id].send_time = std::chrono::high_resolution_clock::now();
+    }
+
+    quicly_datagram_t *dgrams[16];
+    size_t num_dgrams = sizeof(dgrams) / sizeof(dgrams[0]);
+    int ret = quicly_send(q_conn, dgrams, &num_dgrams);
+    switch (ret) {
+        case 0: {
+            size_t i;
+            for (i = 0; i != num_dgrams; ++i) {
+                // XXX libuv needs to own this since it frees async
+                char *data = (char*)std::malloc(dgrams[i]->data.len);
+                memcpy(data, dgrams[i]->data.base, dgrams[i]->data.len);
+                if (data == nullptr) {
+                    throw std::runtime_error("unable to allocate datagram memory");
+                }
+                if (_traf_config->family == AF_INET) {
+                    _udp_handle->send<uvw::IPv4>(_traf_config->next_target_address(), _traf_config->port, data, dgrams[i]->data.len);
+                } else {
+                    _udp_handle->send<uvw::IPv6>(_traf_config->next_target_address(), _traf_config->port, data, dgrams[i]->data.len);
+                }
+                q_ctx.packet_allocator->free_packet(q_ctx.packet_allocator, dgrams[i]);
+            }
+        } break;
+        case QUICLY_ERROR_FREE_CONNECTION:
+            /* connection has been closed, free, and exit when running as a client */
+            quicly_free(q_conn);
+            q_conn = NULL;
+            return;
+        default:
+            std::cerr << "quicly_send returned" << std::endl;
+            return;
+    }
+
+}
+#endif
+
 void TrafGen::udp_send()
 {
 
@@ -283,6 +365,109 @@ void TrafGen::udp_send()
     }
 }
 
+#ifdef QUIC_ENABLE
+static int q_on_stop_sending(quicly_stream_t *stream, int err)
+{
+    std::cerr << "QUIC received STOP_SENDING: " << PRIu16 << "\n" << QUICLY_ERROR_GET_ERROR_CODE(err) << std::endl;
+    quicly_close(stream->conn, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0), "");
+    return 0;
+}
+
+static int q_on_receive_reset(quicly_stream_t *stream, int err)
+{
+    std::cerr << "QUIC received RESET_STREAM: " << PRIu16 << "\n" << QUICLY_ERROR_GET_ERROR_CODE(err) << std::endl;
+    quicly_close(stream->conn, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0), "");
+    return 0;
+}
+
+static int q_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
+{
+    int ret;
+
+    /* read input to receive buffer */
+    if ((ret = quicly_streambuf_ingress_receive(stream, off, src, len)) != 0)
+        return ret;
+
+    /* obtain contiguous bytes from the receive buffer */
+    ptls_iovec_t input = quicly_streambuf_ingress_get(stream);
+
+    /* initiate connection close after receiving all data */
+    if (quicly_recvstate_transfer_complete(&stream->recvstate))
+        quicly_close(stream->conn, 0, "");
+
+    /* remove used bytes from receive buffer */
+    quicly_streambuf_ingress_shift(stream, input.len);
+
+    return 0;
+}
+
+static int q_on_stream_open(quicly_stream_open_t *self, quicly_stream_t *stream)
+{
+    static const quicly_stream_callbacks_t stream_callbacks = {
+        quicly_streambuf_destroy, quicly_streambuf_egress_shift, quicly_streambuf_egress_emit, q_on_stop_sending, q_on_receive,
+        q_on_receive_reset};
+    int ret;
+
+    if ((ret = quicly_streambuf_create(stream, sizeof(quicly_streambuf_t))) != 0)
+        return ret;
+    stream->callbacks = &stream_callbacks;
+    return 0;
+}
+
+
+void TrafGen::start_quic()
+{
+
+    // quic
+    q_tlsctx = {
+        .random_bytes = ptls_openssl_random_bytes,
+        .get_time = &ptls_get_time,
+        .key_exchanges = ptls_openssl_key_exchanges,
+        .cipher_suites = ptls_openssl_cipher_suites,
+    };
+    q_stream_open = {q_on_stream_open};
+    q_ctx = quicly_spec_context;
+    q_ctx.tls = &q_tlsctx;
+    quicly_amend_ptls_context(q_ctx.tls);
+    q_ctx.stream_open = &q_stream_open;
+
+    _udp_handle = _loop->resource<uvw::UDPHandle>(_traf_config->family);
+
+    _udp_handle->on<uvw::ErrorEvent>([this](const uvw::ErrorEvent &e, uvw::UDPHandle &) {
+        _metrics->net_error();
+    });
+
+    socklen_t salen{0};
+    if (_traf_config->family == AF_INET) {
+        _udp_handle->bind<uvw::IPv4>("0.0.0.0", 0);
+        salen = sizeof(sockaddr_in);
+    } else {
+        _udp_handle->bind<uvw::IPv6>("::0", 0, uvw::UDPHandle::Bind::IPV6ONLY);
+        salen = sizeof(sockaddr_in6);
+    }
+
+    _metrics->trafgen_id(_udp_handle->sock().port);
+
+    int ret;
+    auto addr = _traf_config->next_target_address();
+    struct sockaddr_storage sa;
+    sockaddr* sa_ptr = (sockaddr*)&sa;
+    sa.ss_family = _traf_config->family;
+    inet_pton(sa.ss_family, addr.data(), sa_ptr->sa_data);
+    if ((ret = quicly_connect(&q_conn, &q_ctx, addr.data(),
+                              (struct sockaddr*)&sa, salen, &q_next_cid, NULL, NULL)) != 0) {
+        throw std::runtime_error("quicly connect failed: " + std::to_string(ret));
+    }
+
+    _udp_handle->on<uvw::UDPDataEvent>([this](const uvw::UDPDataEvent &event, uvw::UDPHandle &h) {
+        q_process_msg(q_conn, (const uint8_t*)event.data.get(), event.length);
+    });
+
+    _udp_handle->recv();
+
+}
+#endif
+
 void TrafGen::start()
 {
 
@@ -290,14 +475,21 @@ void TrafGen::start()
         start_udp();
         _sender_timer = _loop->resource<uvw::TimerHandle>();
         _sender_timer->on<uvw::TimerEvent>([this](const uvw::TimerEvent &event, uvw::TimerHandle &h) {
-            if (_traf_config->protocol == Protocol::UDP) {
-                udp_send();
-            } else if (_traf_config->protocol == Protocol::TCP || _traf_config->protocol == Protocol::TCPTLS) {
-                start_tcp_session();
-            }
+            udp_send();
         });
         _sender_timer->start(uvw::TimerHandle::Time{1}, uvw::TimerHandle::Time{_traf_config->s_delay});
-    } else {
+    }
+#ifdef QUIC_ENABLE
+    else if (_traf_config->protocol == Protocol::QUIC) {
+        start_quic();
+        _sender_timer = _loop->resource<uvw::TimerHandle>();
+        _sender_timer->on<uvw::TimerEvent>([this](const uvw::TimerEvent &event, uvw::TimerHandle &h) {
+            quic_send();
+        });
+        _sender_timer->start(uvw::TimerHandle::Time{1}, uvw::TimerHandle::Time{_traf_config->s_delay});
+    }
+#endif
+    else {
         start_tcp_session();
     }
 
@@ -364,4 +556,23 @@ void TrafGen::stop()
     }
     long shutdown_length = (_in_flight.size()) ? (_traf_config->r_timeout * 1000) : 1;
     _shutdown_timer->start(uvw::TimerHandle::Time{shutdown_length}, uvw::TimerHandle::Time{0});
+
 }
+
+#ifdef QUIC_ENABLE
+void TrafGen::q_process_msg(quicly_conn_t *conn, const uint8_t *src, size_t dgram_len)
+{
+    size_t off, packet_len;
+    assert(conn);
+
+    /* split UDP datagram into multiple QUIC packets */
+    for (off = 0; off < dgram_len; off += packet_len) {
+        quicly_decoded_packet_t decoded;
+        if ((packet_len = quicly_decode_packet(&q_ctx, &decoded, src, dgram_len - off)) == SIZE_MAX)
+            return;
+        /* TODO match incoming packets to connections, handle version negotiation, rebinding, retry, etc. */
+        /* let the current connection handle ingress packets */
+        quicly_receive(conn, &decoded);
+    }
+}
+#endif

@@ -15,7 +15,10 @@ if (NOT CMAKE_BUILD_TYPE)
 endif()
 # ::-------------------------------------------------------------------------::
 
+# this is the source of truth for flamethrower version, which will be written to flame.h include file.
 project(flamethrower VERSION 0.10.0)
+set(FLAME_VERSION_NUM ${PROJECT_VERSION})
+set(FLAME_VERSION "Flamethrower ${PROJECT_VERSION}")
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
@@ -41,11 +44,19 @@ add_compile_options(-Wall)
 # Find and setup all dependencies BEFORE declaring targets.
 # ::-------------------------------------------------------------------------:: 
 
-find_package(PkgConfig)
+find_package(PkgConfig REQUIRED)
 
 pkg_search_module(LIBLDNS REQUIRED libldns ldns)
 pkg_check_modules(LIBUV REQUIRED libuv)
 pkg_check_modules(LIBGNUTLS REQUIRED gnutls>=3.3)
+
+option(QUIC_ENABLE "Enable QUIC support" OFF)
+if (QUIC_ENABLE)
+    pkg_check_modules(OPENSSL REQUIRED libcrypto>=1.0.2)
+    message(STATUS "QUIC support is enabled")
+else()
+    message(STATUS "QUIC support is disabled")
+endif()
 
 # ::-------------------------------------------------------------------------:: 
 # BUILD TARGETS
@@ -62,12 +73,16 @@ add_library(flamecore
         flame/tcpsession.h
         flame/tcptlssession.cpp
         flame/tcptlssession.h
-        flame/utils.cpp flame/utils.h)
+        flame/utils.cpp
+        flame/utils.h)
 
 target_include_directories(flamecore
         PUBLIC ${LIBUV_INCLUDE_DIRS}
         PUBLIC ${LIBLDNS_INCLUDE_DIRS}
         PRIVATE ${LIBGNUTLS_INCLUDE_DIRS}
+        )
+
+target_include_directories(flamecore SYSTEM
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/TokenBucket"
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/docopt.cpp"
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/json"
@@ -82,6 +97,35 @@ target_link_libraries(flamecore
         PRIVATE ${LIBGNUTLS_LDFLAGS}
         PRIVATE ${LIBGNUTLS_LIBRARIES}
         )
+
+if (QUIC_ENABLE)
+target_include_directories(flamecore
+        PUBLIC ${OPENSSL_INCLUDE_DIRS}
+        )
+target_include_directories(flamecore SYSTEM
+        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/quicly/include"
+        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/quicly/deps/picotls/include"
+        )
+target_link_libraries(flamecore
+        PRIVATE ${OPENSSL_LIBRARIES}
+        PRIVATE "-L ${CMAKE_SOURCE_DIR}/3rd/quicly/build/ -lquicly"
+        picotls
+        )
+add_library(picotls STATIC
+        3rd/quicly/deps/picotls/lib/openssl.c
+        3rd/quicly/deps/picotls/lib/pembase64.c
+        3rd/quicly/deps/picotls/lib/picotls.c
+)
+
+target_include_directories(picotls
+        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/quicly/deps/picotls/include"
+        PUBLIC ${OPENSSL_INCLUDE_DIRS}
+)
+
+target_link_libraries(picotls
+        PUBLIC ${OPENSSL_LDFLAGS}
+)
+endif()
 
 add_executable(flame
         3rd/docopt.cpp/docopt.cpp
@@ -110,3 +154,7 @@ target_include_directories(tests
 target_link_libraries(tests
         PRIVATE flamecore
         )
+
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
+configure_file(flame/flame.h.in flame.h @ONLY)
+

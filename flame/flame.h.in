@@ -1,0 +1,3 @@
+#cmakedefine QUIC_ENABLE
+#cmakedefine FLAME_VERSION_NUM "@PROJECT_VERSION@"
+#cmakedefine FLAME_VERSION "@FLAME_VERSION@"

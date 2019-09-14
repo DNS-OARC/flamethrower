@@ -6,7 +6,7 @@
 
 #include "json.hpp"
 #include "metrics.h"
-#include "version.h"
+#include "flame.h"
 
 #include <ldns/util.h>
 

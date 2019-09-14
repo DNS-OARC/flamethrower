@@ -1,4 +1,4 @@
-// Copyright 2017 NSONE, Inc
+// Copyright 2017-2019 NSONE, Inc
 
 #include <iostream>
 #include <iterator>
@@ -17,16 +17,12 @@
 
 #include <uvw.hpp>
 
-#include "version.h"
+#include "flame.h"
 
 static const char USAGE[] =
     R"(Flamethrower.
     Usage:
-      flame [-q QCOUNT] [-c TCOUNT] [-p PORT] [-d DELAY_MS] [-r RECORD] [-T QTYPE] [-o FILE]
-            [-l LIMIT_SECS] [-t TIMEOUT] [-F FAMILY] [-f FILE] [-n LOOP] [-P PROTOCOL]
-            [-Q QPS] [-g GENERATOR] [-v VERBOSITY] [-R] [--class CLASS] [--qps-flow SPEC]
-            [--dnssec] [--targets FILE]
-            TARGET [GENOPTS]...
+      flame [options] TARGET [GENOPTS]...
       flame (-h | --help)
       flame --version
 
@@ -51,9 +47,9 @@ static const char USAGE[] =
       -r RECORD        The base record to use as the DNS query for generators [default: test.com]
       -T QTYPE         The query type to use for generators [default: A]
       -f FILE          Read records from FILE, one per row, QNAME TYPE
-      -p PORT          Which port to flame [defaults: 53, 853 for tcptls]
+      -p PORT          Which port to flame [defaults: 53, 853 for tcptls, 784 for quic]
       -F FAMILY        Internet family (inet/inet6) [default: inet]
-      -P PROTOCOL      Protocol to use (udp/tcp/tcptls) [default: udp]
+      -P PROTOCOL      Protocol to use (udp/tcp/tcptls/quic) [default: udp]
       -g GENERATOR     Generate queries with the given generator [default: static]
       -o FILE          Metrics output file, JSON format
       -v VERBOSITY     How verbose output should be, 0 is silent [default: 1]
@@ -195,16 +191,35 @@ int main(int argc, char *argv[])
             c_count = 30;
     } else if (args["-P"].asString() == "udp") {
         proto = Protocol::UDP;
-    } else {
-        std::cerr << "protocol must be 'udp', 'tcp' or 'tcptls'" << std::endl;
+    }
+#ifdef QUIC_ENABLE
+    else if (args["-P"].asString() == "quic") {
+        proto = Protocol::QUIC;
+    }
+#endif
+    else {
+        std::cerr << "protocol must be 'udp', 'tcp', 'tcptls'";
+#ifdef QUIC_ENABLE
+        std::cerr << ", 'quic'";
+#else
+        std::cerr << " (quic support is disabled)";
+#endif
+        std::cerr << std::endl;
         return 1;
     }
 
     if (!args["-p"]) {
-        if (proto == Protocol::TCPTLS)
+        if (proto == Protocol::TCPTLS) {
             args["-p"] = std::string("853");
-        else
+        }
+#ifdef QUIC_ENABLE
+        else if (proto == Protocol::QUIC) {
+            args["-p"] = std::string("784");
+        }
+#endif
+        else {
             args["-p"] = std::string("53");
+        }
     }
 
     auto runtime_limit = args["-l"].asLong();
