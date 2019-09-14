@@ -72,6 +72,7 @@ target_include_directories(flamecore
         PRIVATE ${LIBGNUTLS_INCLUDE_DIRS}
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/docopt.cpp"
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/json"
+        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/url-parser"
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/uvw"
         )
 
@@ -86,6 +87,7 @@ target_link_libraries(flamecore
 
 add_executable(flame
         3rd/docopt.cpp/docopt.cpp
+        3rd/url-parser/url_parser.c
         flame/main.cpp
         )
 
