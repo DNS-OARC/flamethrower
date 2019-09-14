@@ -54,10 +54,12 @@ pkg_check_modules(LIBGNUTLS REQUIRED gnutls>=3.3)
 # ::-------------------------------------------------------------------------:: 
 
 add_library(flamecore
+        flame/http.h
         flame/metrics.cpp
         flame/metrics.h
         flame/query.cpp
         flame/query.h
+        flame/target.h
         flame/trafgen.cpp
         flame/trafgen.h
         flame/tcpsession.cpp
