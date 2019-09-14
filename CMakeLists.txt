@@ -72,6 +72,8 @@ target_include_directories(flamecore
         PUBLIC ${LIBUV_INCLUDE_DIRS}
         PUBLIC ${LIBLDNS_INCLUDE_DIRS}
         PRIVATE ${LIBGNUTLS_INCLUDE_DIRS}
+        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/base64url"
+        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/TokenBucket"
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/docopt.cpp"
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/json"
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/url-parser"
@@ -88,6 +90,7 @@ target_link_libraries(flamecore
         )
 
 add_executable(flame
+        3rd/base64url/base64.cpp
         3rd/docopt.cpp/docopt.cpp
         3rd/url-parser/url_parser.c
         flame/main.cpp
