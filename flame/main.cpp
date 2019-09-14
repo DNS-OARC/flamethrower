@@ -10,6 +10,7 @@
 
 #include "config.h"
 #include "docopt.h"
+#include "http.h"
 #include "metrics.h"
 #include "query.h"
 #include "trafgen.h"
@@ -23,7 +24,7 @@ static const char USAGE[] =
     R"(Flamethrower.
     Usage:
       flame [-b BIND_IP] [-q QCOUNT] [-c TCOUNT] [-p PORT] [-d DELAY_MS] [-r RECORD] [-T QTYPE]
-            [-o FILE] [-l LIMIT_SECS] [-t TIMEOUT] [-F FAMILY] [-f FILE] [-n LOOP] [-P PROTOCOL]
+            [-o FILE] [-l LIMIT_SECS] [-t TIMEOUT] [-F FAMILY] [-f FILE] [-n LOOP] [-P PROTOCOL] [-M HTTPMETHOD]
             [-Q QPS] [-g GENERATOR] [-v VERBOSITY] [-R] [--class CLASS] [--qps-flow SPEC]
             [--dnssec] [--targets FILE]
             TARGET [GENOPTS]...
@@ -54,7 +55,8 @@ static const char USAGE[] =
       -f FILE          Read records from FILE, one per row, QNAME TYPE
       -p PORT          Which port to flame [defaults: 53, 853 for DoT]
       -F FAMILY        Internet family (inet/inet6) [default: inet]
-      -P PROTOCOL      Protocol to use (udp/tcp/dot) [default: udp]
+      -P PROTOCOL      Protocol to use (udp/tcp/dot/https) [default: udp]
+      -M HTTPMETHOD    HTTP method to use (POST/GET) when https is enabled [default: GET]
       -g GENERATOR     Generate queries with the given generator [default: static]
       -o FILE          Metrics output file, JSON format
       -v VERBOSITY     How verbose output should be, 0 is silent [default: 1]
@@ -196,10 +198,12 @@ int main(int argc, char *argv[])
     Protocol proto{Protocol::UDP};
     // note: tcptls is available as a deprecated alternative to dot
     if (args["-P"].asString() == "tcp" || args["-P"].asString() == "dot" || args["-P"].asString() == "tcptls") {
+    if (args["-P"].asString() == "tcp" || args["-P"].asString() == "dot" || args["-P"].asString() == "tcptls" || args["-P"].asString() == "https") {
         if (args["-P"].asString() == "dot" || args["-P"].asString() == "tcptls") {
             proto = Protocol::DOT;
-        }
-        else if (args["-P"].asString() == "tcp") {
+        } else if (args["-P"].asString() == "https") {
+            proto = Protocol::HTTPS;
+        } else {
             proto = Protocol::TCP;
         }
         if (!arg_exists("-d", argc, argv))
@@ -211,15 +215,22 @@ int main(int argc, char *argv[])
     } else if (args["-P"].asString() == "udp") {
         proto = Protocol::UDP;
     } else {
-        std::cerr << "protocol must be 'udp', 'tcp' or 'dot'" << std::endl;
+        std::cerr << "protocol must be 'udp', 'tcp', dot' or 'https'" << std::endl;
         return 1;
     }
 
     if (!args["-p"]) {
         if (proto == Protocol::DOT)
             args["-p"] = std::string("853");
+        else if (proto == Protocol::HTTPS)
+            args["-p"] = std::string("443");
         else
             args["-p"] = std::string("53");
+    }
+
+    HTTPMethod method{HTTPMethod::GET};
+    if(args["-M"].asString() == "POST") {
+        method = HTTPMethod::POST;
     }
 
     auto runtime_limit = args["-l"].asLong();
@@ -266,13 +277,25 @@ int main(int argc, char *argv[])
         raw_target_list = split(args["TARGET"].asString(), ',');
     }
 
-    std::vector<std::string> target_list;
+    std::vector<Target> target_list;
     auto request = loop->resource<uvw::GetAddrInfoReq>();
     for (uint i = 0; i < raw_target_list.size(); i++) {
         uvw::Addr addr;
-        auto target_resolved = request->addrInfoSync(raw_target_list[i], args["-p"].asString());
+        struct http_parser_url parsed = {};
+        std::string url = raw_target_list[i];
+        if(url.rfind("https://", 0) != 0 && proto == Protocol::HTTPS) {
+            url.insert(0, "https://");
+        }
+        int ret = http_parser_parse_url(url.c_str(), strlen(url.c_str()), 0, &parsed);
+        if(ret != 0) {
+            std::cerr << "could not parse url: " << url << std::endl;
+            return 1;
+        }
+        std::string authority(&url[parsed.field_data[UF_HOST].off], parsed.field_data[UF_HOST].len);
+
+        auto target_resolved = request->addrInfoSync(authority, args["-p"].asString());
         if (!target_resolved.first) {
-            std::cerr << "unable to resolve target address: " << raw_target_list[i] << std::endl;
+            std::cerr << "unable to resolve target address: " << authority << std::endl;
             if (raw_target_list[i] == "file") {
                 std::cerr << "(did you mean to include --targets?)" << std::endl;
             }
@@ -292,7 +315,7 @@ int main(int argc, char *argv[])
         } else if (family == AF_INET6) {
             addr = uvw::details::address<uvw::IPv6>((struct sockaddr_in6 *)node->ai_addr);
         }
-        target_list.push_back(addr.ip);
+        target_list.push_back({&parsed, addr.ip, url});
     }
 
     long want_r_limit = args["-Q"].asLong();
@@ -358,10 +381,11 @@ int main(int argc, char *argv[])
     traf_config->batch_count = b_count;
     traf_config->family = family;
     traf_config->bind_ip = bind_ip;
-    traf_config->target_address = target_list;
+    traf_config->target_list = target_list;
     traf_config->port = static_cast<unsigned int>(args["-p"].asLong());
     traf_config->s_delay = s_delay;
     traf_config->protocol = proto;
+    traf_config->method = method;
     traf_config->r_timeout = args["-t"].asLong();
 
     std::vector<std::shared_ptr<TrafGen>> throwers;
@@ -439,16 +463,16 @@ int main(int argc, char *argv[])
         std::cout << "binding to " << traf_config->bind_ip << std::endl;
         std::cout << "flaming target(s) [";
         for (uint i = 0; i < 3; i++) {
-            std::cout << traf_config->target_address[i];
-            if (i == traf_config->target_address.size()-1) {
+            std::cout << traf_config->target_list[i].address;
+            if (i == traf_config->target_list.size()-1) {
                 break;
             }
             else {
                 std::cout << ", ";
             }
         }
-        if (traf_config->target_address.size() > 3) {
-            std::cout << "and " << traf_config->target_address.size()-3 << " more";
+        if (traf_config->target_list.size() > 3) {
+            std::cout << "and " << traf_config->target_list.size()-3 << " more";
         }
         std::cout << "] on port "
                   << args["-p"].asLong()
