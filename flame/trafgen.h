@@ -7,8 +7,11 @@
 #include <vector>
 
 #include "config.h"
+#include "http.h"
+#include "httpssession.h"
 #include "metrics.h"
 #include "query.h"
+#include "target.h"
 #include "tcpsession.h"
 #include "tokenbucket.h"
 
@@ -16,12 +19,13 @@
 
 enum class Protocol {
     UDP,
+    HTTPS,
     TCP,
     DOT,
 };
 
 struct TrafGenConfig {
-    std::vector<std::string> target_address;
+    std::vector<Target> target_list;
     unsigned int _current_target{0};
     int family{0};
     std::string bind_ip;
@@ -30,11 +34,12 @@ struct TrafGenConfig {
     long s_delay{1};
     long batch_count{10};
     Protocol protocol{Protocol::UDP};
-    const std::string& next_target_address()
+    HTTPMethod method{HTTPMethod::POST};
+    const Target& next_target()
     {
-        const std::string& next = target_address[_current_target];
+        const Target& next = target_list[_current_target];
         _current_target++;
-        if (_current_target >= target_address.size())
+        if (_current_target >= target_list.size())
             _current_target = 0;
         return next;
     }
