@@ -11,6 +11,7 @@
 #include <tuple>
 #include <vector>
 
+#include "base64.h"
 #include "config.h"
 #include <ldns/rr.h>
 
@@ -64,6 +65,7 @@ public:
 
     virtual void init() = 0;
 
+    virtual QueryTpt next_base64url(uint16_t);
     virtual QueryTpt next_udp(uint16_t);
     virtual QueryTpt next_tcp(const std::vector<uint16_t> &);
     bool finished();
@@ -244,6 +246,7 @@ public:
 
     void init();
 
+    //QueryTpt next_base64url(uint16_t);
     QueryTpt next_udp(uint16_t);
     QueryTpt next_tcp(const std::vector<uint16_t> &);
 

@@ -140,6 +140,21 @@ void QueryGenerator::set_args(const std::vector<std::string> &args)
     }
 }
 
+QueryGenerator::QueryTpt QueryGenerator::next_base64url(uint16_t id)
+{
+    WireTpt w = _wire_buffers[_reqs++ % _wire_buffers.size()];
+    size_t len{w.second};
+    auto buf = std::make_unique<char[]>(len);
+    memcpy(buf.get(), w.first, w.second);
+    uint16_t _id = ntohs(id);
+    memcpy(buf.get(), &_id, sizeof(_id));
+    std::string encoded = base64_encode((unsigned char*) buf.get(), len);
+    size_t encoded_len = encoded.size();
+    auto encoded_buf = std::make_unique<char []>(encoded_len);
+    memcpy(encoded_buf.get(), encoded.c_str(), encoded_len);
+    return std::make_tuple(std::move(encoded_buf), encoded_len);
+}
+
 QueryGenerator::QueryTpt QueryGenerator::next_tcp(const std::vector<uint16_t> &id_list)
 {
 
