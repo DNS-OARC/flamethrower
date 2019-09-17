@@ -15,7 +15,7 @@ if (NOT CMAKE_BUILD_TYPE)
 endif()
 # ::-------------------------------------------------------------------------::
 
-project(flamethrower VERSION 0.10.0)
+project(flamethrower VERSION 0.10.1)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
@@ -68,7 +68,6 @@ target_include_directories(flamecore
         PUBLIC ${LIBUV_INCLUDE_DIRS}
         PUBLIC ${LIBLDNS_INCLUDE_DIRS}
         PRIVATE ${LIBGNUTLS_INCLUDE_DIRS}
-        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/TokenBucket"
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/docopt.cpp"
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/json"
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/uvw"

@@ -10,8 +10,8 @@
 #include "metrics.h"
 #include "query.h"
 #include "tcpsession.h"
+#include "tokenbucket.h"
 
-#include <TokenBucket.h>
 #include <uvw.hpp>
 
 enum class Protocol {
