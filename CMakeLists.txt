@@ -109,3 +109,8 @@ target_include_directories(tests
 target_link_libraries(tests
         PRIVATE flamecore
         )
+
+install(TARGETS flame flamecore
+        RUNTIME DESTINATION bin
+        LIBRARY DESTINATION lib${LIB_SUFFIX}
+        ARCHIVE DESTINATION lib/static)
