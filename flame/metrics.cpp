@@ -295,7 +295,7 @@ void MetricsMgr::aggregate_trafgen(const Metrics *m)
 
     if (_agg_total_response_max_ms == 0) {
         _agg_total_response_max_ms = m->_period_response_max_ms;
-    } else if (m->_period_response_max_ms && m->_period_response_max_ms > _agg_period_response_max_ms) {
+    } else if (m->_period_response_max_ms && m->_period_response_max_ms > _agg_total_response_max_ms) {
         _agg_total_response_max_ms = m->_period_response_max_ms;
     }
 
