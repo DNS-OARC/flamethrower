@@ -16,7 +16,7 @@ extern ldns_lookup_table ldns_rcodes[];
 
 std::shared_ptr<Metrics> MetricsMgr::create_trafgen_metrics()
 {
-    auto m = std::make_shared<Metrics>(_loop, *this);
+    auto m = std::make_shared<Metrics>(_loop);
     _metrics.push_back(m);
     return m;
 }
@@ -80,6 +80,7 @@ void MetricsMgr::flush_to_disk()
 {
     update_runtime();
     json j;
+    j["period_number"] = _aggregate_count;
     j["total_s_count"] = _agg_total_s_count;
     j["total_r_count"] = _agg_total_r_count;
     j["period_timeouts"] = _agg_period_timeouts;
@@ -244,6 +245,7 @@ void MetricsMgr::aggregate_trafgen(const Metrics *m)
     if (_per_trafgen_metrics && _metric_file.is_open()) {
         // record per trafgen metrics to out file
         json j;
+        j["period_number"] = _aggregate_count;
         j["period_s_count"] = m->_period_s_count;
         j["period_r_count"] = m->_period_r_count;
         j["run_id"] = _run_id;
@@ -295,7 +297,7 @@ void MetricsMgr::aggregate_trafgen(const Metrics *m)
 
     if (_agg_total_response_max_ms == 0) {
         _agg_total_response_max_ms = m->_period_response_max_ms;
-    } else if (m->_period_response_max_ms && m->_period_response_max_ms > _agg_period_response_max_ms) {
+    } else if (m->_period_response_max_ms && m->_period_response_max_ms > _agg_total_response_max_ms) {
         _agg_total_response_max_ms = m->_period_response_max_ms;
     }
 

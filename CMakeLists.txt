@@ -15,7 +15,7 @@ if (NOT CMAKE_BUILD_TYPE)
 endif()
 # ::-------------------------------------------------------------------------::
 
-project(flamethrower VERSION 0.10.1)
+project(flamethrower VERSION 0.10.2)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
