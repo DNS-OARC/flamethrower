@@ -165,11 +165,15 @@ void MetricsMgr::aggregate(bool no_avgs)
         }
 
         // TODO avg of averages, here be dragons
+        auto rcv_cnt = 0;
         for (const auto &i : _metrics) {
-            _agg_period_response_avg_ms += i->_period_response_avg_ms;
+            if (i->_period_r_count) {
+                rcv_cnt++;
+                _agg_period_response_avg_ms += i->_period_response_avg_ms;
+            }
             _agg_period_pkt_size_avg += i->_period_pkt_size_avg;
         }
-        _agg_period_response_avg_ms /= _metrics.size();
+        _agg_period_response_avg_ms /= rcv_cnt;
         _agg_period_pkt_size_avg /= _metrics.size();
         if (_agg_period_response_avg_ms) {
             _agg_total_response_avg_ms = (_agg_period_response_avg_ms + (_agg_total_response_avg_ms * (_aggregate_count - 1))) / _aggregate_count;
