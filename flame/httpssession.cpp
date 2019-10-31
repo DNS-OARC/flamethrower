@@ -16,6 +16,8 @@ static ssize_t gnutls_push_trampoline(gnutls_transport_ptr_t h, const void *buf,
     return session->gnutls_push(buf, len);
 }
 
+
+// TODO: Remove duplicate code between TLSSession and this class
 HTTPSSession::HTTPSSession(std::shared_ptr<uvw::TcpHandle> handle,
                             TCPSession::malformed_data_cb malformed_data_handler,
                             TCPSession::got_dns_msg_cb got_dns_msg_handler,
@@ -40,7 +42,7 @@ void HTTPSSession::add_stream(http2_stream_data *stream_data)
     _current_session->root.next = stream_data;
     stream_data->prev = &_current_session->root;
     if (stream_data->next) {
-      stream_data->next->prev = stream_data;
+    	stream_data->next->prev = stream_data;
     }
 }
 
@@ -48,7 +50,7 @@ void HTTPSSession::remove_stream(http2_stream_data *stream_data)
 {
     stream_data->prev->next = stream_data->next;
     if (stream_data->next) {
-      stream_data->next->prev = stream_data->prev;
+      	stream_data->next->prev = stream_data->prev;
     }
 }
 
@@ -58,6 +60,7 @@ http2_stream_data* HTTPSSession::create_http2_stream_data(std::unique_ptr<char[]
     struct http_parser_url *u = _target.parsed;
     std::string authority(&uri[u->field_data[UF_HOST].off], u->field_data[UF_HOST].len);
     int32_t stream_id = -1;
+	//TODO: even though the RFC specifies dns-query?dns, this can depend on the implementation. Do not hardcode.
     std::string path = "/dns-query";
 	if(_method == HTTPMethod::GET) {
 		path.append("?dns=");
@@ -117,7 +120,7 @@ static ssize_t send_callback(nghttp2_session *session, const uint8_t *data, size
 
 void HTTPSSession::destroy_stream()
  {
-    //delete(_current_session->root);
+    delete(_current_session->root);
 }
 
 void HTTPSSession::destroy_session()
@@ -125,11 +128,11 @@ void HTTPSSession::destroy_session()
     gnutls_certificate_free_credentials(_gnutls_cert_credentials);
     gnutls_deinit(_gnutls_session);
     nghttp2_session_del(_current_session->session);
-    //_current_session->session = NULL;
-    // if(_current_session->root) {
-    //     destroy_stream();
-    //     _current_session->root = NULL;
-    // }
+    _current_session->session = NULL;
+    if(_current_session->root) {
+    	destroy_stream();
+    	_current_session->root = NULL;
+    }
 }
 
 void HTTPSSession::process_receive(const uint8_t *data, size_t len) {
@@ -150,16 +153,11 @@ static int on_data_chunk_recv_callback(nghttp2_session *session, uint8_t flags,
     size_t len, void *user_data)
 {
     HTTPSSession *class_session = (HTTPSSession *)user_data;
-    (void)session;
-    (void)flags;
-
     auto req = nghttp2_session_get_stream_user_data(session, stream_id);
-
     if (!req) {
         std::cout << "no stream data, on data chunk" << std::endl;
         return 0;
     }
-    
     class_session->process_receive(data, len);
     return 0;
 }
@@ -167,7 +165,6 @@ static int on_data_chunk_recv_callback(nghttp2_session *session, uint8_t flags,
 static int on_stream_close_callback(nghttp2_session *session, int32_t stream_id, uint32_t error_code, void *user_data)
 {
     HTTPSSession *class_session = (HTTPSSession *)user_data;
-
     http2_stream_data *stream_data = static_cast<http2_stream_data *>(nghttp2_session_get_stream_user_data(session, stream_id));
     if (!stream_data) {
         std::cout << "no stream data, stream close" << std::endl;
@@ -242,6 +239,7 @@ bool HTTPSSession::setup()
 
 void HTTPSSession::send_settings()
 {
+	//TODO: Find out why increasing this value still results in a maximum of 100 concurrent streams...
     nghttp2_settings_entry settings[1] = { {NGHTTP2_SETTINGS_MAX_CONCURRENT_STREAMS, 100} };
     int val;
     val = nghttp2_submit_settings(_current_session->session, NGHTTP2_FLAG_NONE, settings, ARRLEN(settings));
@@ -273,7 +271,6 @@ int HTTPSSession::session_send()
 
 void HTTPSSession::on_connect_event()
 {
-    initiate_session_data();
     do_handshake();
 }
 
@@ -292,23 +289,6 @@ static ssize_t post_data(nghttp2_session *session, int32_t stream_id, uint8_t *b
 	return nread;
 }
 
-static void print_header(FILE *f, const uint8_t *name, size_t namelen, const uint8_t *value, size_t valuelen)
-{
-    fwrite(name, 1, namelen, f);
-    fprintf(f, ": ");
-    fwrite(value, 1, valuelen, f);
-    fprintf(f, "\n");
-}
-
-static void print_headers(FILE *f, nghttp2_nv *nva, size_t nvlen)
-{
-    size_t i;
-    for (i = 0; i < nvlen; ++i) {
-        print_header(f, nva[i].name, nva[i].namelen, nva[i].value, nva[i].valuelen);
-    }
-    fprintf(f, "\n");
-}
-
 void HTTPSSession::write(std::unique_ptr<char[]> data, size_t len)
 {
     int32_t stream_id;
@@ -316,6 +296,7 @@ void HTTPSSession::write(std::unique_ptr<char[]> data, size_t len)
     std::string uri = stream_data->uri;
     const struct http_parser_url *u = stream_data->u;
     std::string current_path = stream_data->path;
+	//TODO: Duplicate code
 	if(_method == HTTPMethod::GET) {
 		nghttp2_nv hdrs[] = {
 		  MAKE_NV2(":method", "GET"),
@@ -324,7 +305,6 @@ void HTTPSSession::write(std::unique_ptr<char[]> data, size_t len)
 		  MAKE_NV(":path", current_path.c_str(), current_path.size()),
 		  MAKE_NV2("accept", "application/dns-message"),
 		};
-		//print_headers(stderr, hdrs, ARRLEN(hdrs));
 		stream_id = nghttp2_submit_request(_current_session->session, NULL, hdrs, ARRLEN(hdrs), NULL, stream_data);
 	} else {
 		nghttp2_nv hdrs[] = {
@@ -337,7 +317,6 @@ void HTTPSSession::write(std::unique_ptr<char[]> data, size_t len)
 		  MAKE_NV2("content-type", "application/dns-message"),
 		  MAKE_NV("content-length", std::to_string(len).c_str(), std::to_string(len).size())
 		};
-		//print_headers(stderr, hdrs, ARRLEN(hdrs));
 		nghttp2_data_provider provider;
 		provider.read_callback = post_data;
 		stream_id = nghttp2_submit_request(_current_session->session, NULL, hdrs, ARRLEN(hdrs), &provider, stream_data);
