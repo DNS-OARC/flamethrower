@@ -46,14 +46,6 @@ void HTTPSSession::add_stream(http2_stream_data *stream_data)
     }
 }
 
-void HTTPSSession::remove_stream(http2_stream_data *stream_data)
-{
-    stream_data->prev->next = stream_data->next;
-    if (stream_data->next) {
-      	stream_data->next->prev = stream_data->prev;
-    }
-}
-
 http2_stream_data* HTTPSSession::create_http2_stream_data(std::unique_ptr<char[]> data, size_t len)
 {
     std::string uri = _target.uri;
@@ -118,21 +110,11 @@ static ssize_t send_callback(nghttp2_session *session, const uint8_t *data, size
     return (ssize_t)length;
 }
 
-void HTTPSSession::destroy_stream()
- {
-    delete(_current_session->root);
-}
-
 void HTTPSSession::destroy_session()
  {
     gnutls_certificate_free_credentials(_gnutls_cert_credentials);
     gnutls_deinit(_gnutls_session);
     nghttp2_session_del(_current_session->session);
-    _current_session->session = NULL;
-    if(_current_session->root) {
-    	destroy_stream();
-    	_current_session->root = NULL;
-    }
 }
 
 void HTTPSSession::process_receive(const uint8_t *data, size_t len) {
@@ -164,13 +146,11 @@ static int on_data_chunk_recv_callback(nghttp2_session *session, uint8_t flags,
 
 static int on_stream_close_callback(nghttp2_session *session, int32_t stream_id, uint32_t error_code, void *user_data)
 {
-    HTTPSSession *class_session = (HTTPSSession *)user_data;
     http2_stream_data *stream_data = static_cast<http2_stream_data *>(nghttp2_session_get_stream_user_data(session, stream_id));
     if (!stream_data) {
         std::cout << "no stream data, stream close" << std::endl;
         return 0;
     }
-    class_session->remove_stream(stream_data);
     nghttp2_session_terminate_session(session, NGHTTP2_NO_ERROR);
     return 0;
 }
@@ -271,6 +251,7 @@ int HTTPSSession::session_send()
 
 void HTTPSSession::on_connect_event()
 {
+	initiate_session_data();
     do_handshake();
 }
 
