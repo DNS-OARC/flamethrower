@@ -1,6 +1,6 @@
 FROM ubuntu:disco AS build
 
-ENV BUILD_DEPS "g++ cmake make libldns-dev libuv1-dev libgnutls28-dev pkgconf"
+ENV BUILD_DEPS "g++ cmake make libldns-dev libnghttp2-dev libuv1-dev libgnutls28-dev pkgconf"
 
 RUN \
     apt-get update && \
@@ -17,7 +17,7 @@ RUN \
 
 FROM ubuntu:disco AS runtime
 
-ENV RUNTIME_DEPS "libldns2 libuv1"
+ENV RUNTIME_DEPS "libldns2 libuv1 nghttp2"
 
 RUN \
     apt-get update && \
