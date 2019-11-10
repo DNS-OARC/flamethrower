@@ -11,7 +11,7 @@ matrix:
             - cmake
             - libssl-dev
             - libgnutls-dev
-            - nghttp2
+            - libnghttp2-dev
     - os: osx
       addons:
         homebrew:
