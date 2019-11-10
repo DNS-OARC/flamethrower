@@ -1,6 +1,6 @@
 ---
 language: c
-dist: xenial
+dist: bionic
 
 matrix:
   include:
@@ -10,7 +10,7 @@ matrix:
           packages:
             - cmake
             - libssl-dev
-            - libgnutls-dev
+            - libgnutls28-dev
             - libnghttp2-dev
     - os: osx
       addons:
