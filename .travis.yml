@@ -11,6 +11,7 @@ matrix:
             - cmake
             - libssl-dev
             - libgnutls-dev
+            - nghttp2
     - os: osx
       addons:
         homebrew:
@@ -19,6 +20,7 @@ matrix:
             - cmake
             - libuv
             - ldns
+            - nghttp2
             - openssl
 
 before_script:
