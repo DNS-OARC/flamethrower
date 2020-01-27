@@ -74,6 +74,9 @@ Target can be either an IP address or host name which will be resolved first.
 -P ( udp | tcp | dot )
 : Protocol to use. Default is udp.
 
+-M ( GET | POST)
+: HTTP method to use for DNS over HTTPS. Default is GET.
+
 -Q *QPS*
 : Rate limit to a maximum queries per second, 0 is unlimited. Default is 0.
 
