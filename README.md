@@ -74,6 +74,16 @@ Flame target, port 443, DoT:
 flame -p 443 -P dot target.test.com
 ```
 
+Flame target, DNS over HTTPS GET:
+```
+flame -P https target.test.com/dns-query
+```
+
+Flame target, DNS over HTTPS POST:
+```
+flame -P https -M POST target.test.com/dns-query
+```
+
 Flame target with random labels:
 ```
 flame target.test.com -g randomlabel lblsize=10 lblcount=4 count=1000
