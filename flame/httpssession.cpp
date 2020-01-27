@@ -266,7 +266,7 @@ void HTTPSSession::write(std::unique_ptr<char[]> data, size_t len)
         std::cout << "Could not submit HTTP request: " << nghttp2_strerror(stream_id);
     }
 
-    stream_data->stream_id = stream_id;
+    stream_data->id = stream_id;
 
     if(session_send() != 0) {
         std::cerr << "failed to send" << std::endl;
