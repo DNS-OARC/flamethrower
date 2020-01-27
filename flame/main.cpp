@@ -197,7 +197,6 @@ int main(int argc, char *argv[])
 
     Protocol proto{Protocol::UDP};
     // note: tcptls is available as a deprecated alternative to dot
-    if (args["-P"].asString() == "tcp" || args["-P"].asString() == "dot" || args["-P"].asString() == "tcptls") {
     if (args["-P"].asString() == "tcp" || args["-P"].asString() == "dot" || args["-P"].asString() == "tcptls" || args["-P"].asString() == "https") {
         if (args["-P"].asString() == "dot" || args["-P"].asString() == "tcptls") {
             proto = Protocol::DOT;

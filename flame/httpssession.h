@@ -10,12 +10,11 @@
 #include "target.h"
 
 struct http2_stream_data {
-    http2_stream_data(std::string _scheme, std::string _authority, std::string _path, int32_t _stream_id, std::string _data):
-	scheme(_scheme), authority(_authority), path(_path), stream_id(_stream_id), data(_data) {}
+    http2_stream_data(std::string _scheme, std::string _authority, std::string _path, int32_t _id, std::string _data):
+	scheme(_scheme), authority(_authority), path(_path), id(_id), data(_data) {}
     std::string scheme;
     std::string authority;
     std::string path;
-    int32_t stream_id;
     int32_t id;
     std::string data;
 }; 
