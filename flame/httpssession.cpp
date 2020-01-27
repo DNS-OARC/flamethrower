@@ -42,9 +42,8 @@ http2_stream_data* HTTPSSession::create_http2_stream_data(std::unique_ptr<char[]
     struct http_parser_url *u = _target.parsed;
     std::string scheme(&uri[u->field_data[UF_SCHEMA].off], u->field_data[UF_SCHEMA].len);
     std::string authority(&uri[u->field_data[UF_HOST].off], u->field_data[UF_HOST].len);
+    std::string path(&uri[u->field_data[UF_PATH].off], u->field_data[UF_PATH].len);
     int32_t stream_id = -1;
-    //TODO: even though the RFC specifies dns-query?dns, this can depend on the implementation. Do not hardcode.
-    std::string path = "/dns-query";
     if(_method == HTTPMethod::GET) {
 	path.append("?dns=");
 	path.append(data.get(), len);
