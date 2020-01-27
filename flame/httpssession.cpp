@@ -71,8 +71,6 @@ http2_stream_data* HTTPSSession::create_http2_stream_data(std::unique_ptr<char[]
 static ssize_t send_callback(nghttp2_session *session, const uint8_t *data, size_t length, int flags, void *user_data)
 {
     HTTPSSession *class_session = (HTTPSSession *)user_data;
-    (void)session;
-    (void)flags;
     class_session->send_tls((void*) data, length);
     return (ssize_t)length;
 }
