@@ -71,10 +71,10 @@ Target can be either an IP address or host name which will be resolved first.
 -R
 : Randomize the query list before sending. Default is false.
 
--P ( udp | tcp | dot )
+-P ( udp | tcp | dot | https )
 : Protocol to use. Default is udp.
 
--M ( GET | POST)
+-M ( GET | POST )
 : HTTP method to use for DNS over HTTPS. Default is GET.
 
 -Q *QPS*
