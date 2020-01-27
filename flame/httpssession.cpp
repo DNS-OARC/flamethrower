@@ -19,12 +19,12 @@ static ssize_t gnutls_push_trampoline(gnutls_transport_ptr_t h, const void *buf,
 
 // TODO: Remove duplicate code between TLSSession and this class
 HTTPSSession::HTTPSSession(std::shared_ptr<uvw::TcpHandle> handle,
-			   TCPSession::malformed_data_cb malformed_data_handler,
-			   TCPSession::got_dns_msg_cb got_dns_msg_handler,
-			   TCPSession::connection_ready_cb connection_ready_handler,
-			   handshake_error_cb handshake_error_handler, 
-			   Target target,
-			   HTTPMethod method)
+                           TCPSession::malformed_data_cb malformed_data_handler,
+                           TCPSession::got_dns_msg_cb got_dns_msg_handler,
+                           TCPSession::connection_ready_cb connection_ready_handler,
+                           handshake_error_cb handshake_error_handler, 
+                           Target target,
+                           HTTPMethod method)
     : TCPSession(handle, malformed_data_handler, got_dns_msg_handler, connection_ready_handler),
       _malformed_data{malformed_data_handler}, _got_dns_msg{got_dns_msg_handler}, _handle{handle}, _tls_state{LinkState::HANDSHAKE}, _handshake_error{handshake_error_handler}, _target{target}, _method{method}
 {
@@ -45,25 +45,25 @@ http2_stream_data* HTTPSSession::create_http2_stream_data(std::unique_ptr<char[]
     std::string path(&uri[u->field_data[UF_PATH].off], u->field_data[UF_PATH].len);
     int32_t stream_id = -1;
     if(_method == HTTPMethod::GET) {
-	path.append("?dns=");
-	path.append(data.get(), len);
+        path.append("?dns=");
+        path.append(data.get(), len);
     }
     std::string streamData(data.get(), len);
     http2_stream_data *root = new http2_stream_data(scheme, authority, path, stream_id, streamData);
     return root;
 }
 
-#define MAKE_NV(NAME, VALUE, VALUELEN)					\
-    {									\
-	(uint8_t *)NAME, (uint8_t *)VALUE, sizeof(NAME) - 1, VALUELEN,	\
-	    NGHTTP2_NV_FLAG_NONE					\
-	    }
+#define MAKE_NV(NAME, VALUE, VALUELEN)                                  \
+    {                                                                   \
+        (uint8_t *)NAME, (uint8_t *)VALUE, sizeof(NAME) - 1, VALUELEN,  \
+            NGHTTP2_NV_FLAG_NONE                                        \
+            }
 
-#define MAKE_NV2(NAME, VALUE)						\
-    {									\
-	(uint8_t *)NAME, (uint8_t *)VALUE, sizeof(NAME) - 1, sizeof(VALUE)-1, \
-	    NGHTTP2_NV_FLAG_NONE					\
-	    }
+#define MAKE_NV2(NAME, VALUE)                                           \
+    {                                                                   \
+        (uint8_t *)NAME, (uint8_t *)VALUE, sizeof(NAME) - 1, sizeof(VALUE)-1, \
+            NGHTTP2_NV_FLAG_NONE                                        \
+            }
 
 #define ARRLEN(x) (sizeof(x) / sizeof(x[0]))
 
@@ -85,9 +85,9 @@ void HTTPSSession::process_receive(const uint8_t *data, size_t len) {
     const size_t MIN_DNS_QUERY_SIZE = 17;
     const size_t MAX_DNS_QUERY_SIZE = 512;
     if(len < MIN_DNS_QUERY_SIZE || len > MAX_DNS_QUERY_SIZE) {
-	std::cerr << "malformed data" << std::endl;
-	_malformed_data();
-	return;
+        std::cerr << "malformed data" << std::endl;
+        _malformed_data();
+        return;
     }
     auto buf = std::make_unique<char []>(len);
     memcpy(buf.get(), (const char*)data, len);
@@ -95,14 +95,14 @@ void HTTPSSession::process_receive(const uint8_t *data, size_t len) {
 }
 
 static int on_data_chunk_recv_callback(nghttp2_session *session, uint8_t flags,
-				       int32_t stream_id, const uint8_t *data,
-				       size_t len, void *user_data)
+                                       int32_t stream_id, const uint8_t *data,
+                                       size_t len, void *user_data)
 {
     HTTPSSession *class_session = (HTTPSSession *)user_data;
     auto req = nghttp2_session_get_stream_user_data(session, stream_id);
     if (!req) {
-	std::cout << "no stream data, on data chunk" << std::endl;
-	return 0;
+        std::cout << "no stream data, on data chunk" << std::endl;
+        return 0;
     }
     class_session->process_receive(data, len);
     return 0;
@@ -112,8 +112,8 @@ static int on_stream_close_callback(nghttp2_session *session, int32_t stream_id,
 {
     http2_stream_data *stream_data = static_cast<http2_stream_data *>(nghttp2_session_get_stream_user_data(session, stream_id));
     if (!stream_data) {
-	std::cout << "no stream data, stream close" << std::endl;
-	return 0;
+        std::cout << "no stream data, stream close" << std::endl;
+        return 0;
     }
     nghttp2_session_terminate_session(session, NGHTTP2_NO_ERROR);
     return 0;
