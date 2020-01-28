@@ -1,5 +1,6 @@
 Flamethrower [![Build Status](https://travis-ci.org/DNS-OARC/flamethrower.svg?branch=master)](https://travis-ci.org/DNS-OARC/flamethrower)
 ============
+> This project is in [active development](https://github.com/ns1/community/blob/master/project_status/ACTIVE_DEVELOPMENT.md).
 
 A DNS performance and functional testing utility.
 
@@ -112,5 +113,6 @@ Detailed Features
 
  There is currently no built-in support for multiprocess sending, so the maximum throughput will be reached once a single CPU is saturated. However, you may manually start several concurrent `flame` processes, including up to 1 per CPU available. There is future planned support for builtin multiprocess sending.
 
-
-
+Contributions
+---
+Pull Requests and issues are welcome. See the [NS1 Contribution Guidelines](https://github.com/ns1/community) for more information.
