@@ -269,7 +269,7 @@ void QueryGenerator::new_rec(uint8_t **dest, size_t *dest_len, const char *qname
     if (!prefix.empty()) {
         // todo: move string parsing to file gen; validate mask <32
         auto slashpos = prefix.find('/');
-        auto cidr = prefix.substr(0, slashpos);
+        auto cidr = prefix.substr(0, slashpos); // todo: copies...
         uint8_t mask = std::stoi(prefix.substr(slashpos+1, prefix.size()));
 
         struct sockaddr_in sa;
@@ -291,8 +291,8 @@ void QueryGenerator::new_rec(uint8_t **dest, size_t *dest_len, const char *qname
         buf[idx++] = 0x00; // scope preflen
         std::memcpy(&buf[idx], &sa.sin_addr.s_addr, numbytes); // address
 
-        ldns_rdf *raw = ldns_rdf_new(LDNS_RDF_TYPE_UNKNOWN, buflen, buf);
-        ldns_pkt_set_edns_data(query, raw);
+        ldns_rdf *edns_data = ldns_rdf_new(LDNS_RDF_TYPE_UNKNOWN, buflen, buf);
+        ldns_pkt_set_edns_data(query, edns_data);
     }
 
     ldns_pkt2wire(dest, query, dest_len);
