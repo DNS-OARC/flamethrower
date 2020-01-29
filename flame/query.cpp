@@ -272,8 +272,16 @@ void QueryGenerator::new_rec(uint8_t **dest, size_t *dest_len, const char *qname
         auto cidr = prefix.substr(0, slashpos); // todo: copies...
         uint8_t mask = std::stoi(prefix.substr(slashpos+1, prefix.size()));
 
+        bool ipv6 = false;
         struct sockaddr_in sa;
-        inet_pton(AF_INET, cidr.c_str(), &(sa.sin_addr)); // todo: ipv6
+        struct sockaddr_in6 sa6;
+        if (cidr.find(':') != std::string::npos) {
+            ipv6 = true;
+            inet_pton(AF_INET6, cidr.c_str(), &(sa6.sin6_addr));
+        } else {
+            inet_pton(AF_INET, cidr.c_str(), &(sa.sin_addr));
+        }
+
         int numbytes = (mask + (CHAR_BIT - 1)) / CHAR_BIT;
         uint16_t optionlen = 4 + numbytes;
 
@@ -286,10 +294,14 @@ void QueryGenerator::new_rec(uint8_t **dest, size_t *dest_len, const char *qname
         buf[idx++] = optionlen >> 16; //option-len msb
         buf[idx++] = optionlen & 0xFF; // option-len lsb
         buf[idx++] = 0x00; // family msb
-        buf[idx++] = 0x01; // family lsb
+        buf[idx++] = ipv6 ? 0x02 : 0x01; // family lsb
         buf[idx++] = mask; // source preflen
         buf[idx++] = 0x00; // scope preflen
-        std::memcpy(&buf[idx], &sa.sin_addr.s_addr, numbytes); // address
+        if (ipv6) {
+            std::memcpy(&buf[idx], &sa6.sin6_addr, numbytes); // address
+        } else {
+            std::memcpy(&buf[idx], &sa.sin_addr, numbytes); // address
+        }
 
         ldns_rdf *edns_data = ldns_rdf_new(LDNS_RDF_TYPE_UNKNOWN, buflen, buf);
         ldns_pkt_set_edns_data(query, edns_data);
