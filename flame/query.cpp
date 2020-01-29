@@ -294,7 +294,7 @@ void QueryGenerator::new_rec(uint8_t **dest, size_t *dest_len, const char *qname
         buf[idx++] = optionlen >> 16; //option-len msb
         buf[idx++] = optionlen & 0xFF; // option-len lsb
         buf[idx++] = 0x00; // family msb
-        buf[idx++] = ipv6? 0x02 : 0x01; // family lsb
+        buf[idx++] = ipv6 ? 0x02 : 0x01; // family lsb
         buf[idx++] = mask; // source preflen
         buf[idx++] = 0x00; // scope preflen
         if (ipv6) {
