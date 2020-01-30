@@ -4,6 +4,7 @@
 #include "utils.h"
 #include <algorithm>
 #include <cctype>
+#include <climits>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
