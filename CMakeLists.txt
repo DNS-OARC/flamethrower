@@ -44,7 +44,7 @@ add_compile_options(-Wall)
 find_package(PkgConfig)
 
 pkg_search_module(LIBLDNS REQUIRED libldns ldns)
-pkg_check_modules(LIBUV REQUIRED libuv)
+pkg_check_modules(LIBUV REQUIRED libuv>=1.23)
 pkg_check_modules(LIBGNUTLS REQUIRED gnutls>=3.3)
 
 # ::-------------------------------------------------------------------------:: 

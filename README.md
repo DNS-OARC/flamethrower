@@ -4,7 +4,7 @@ Flamethrower [![Build Status](https://travis-ci.org/DNS-OARC/flamethrower.svg?br
 
 A DNS performance and functional testing utility.
 
-2017-2019 © NSONE, Inc.
+2017-2020© NSONE, Inc.
 
 License
 -------
@@ -16,7 +16,7 @@ Overview
 
 Flamethrower is a small, fast, configurable tool for functional testing, benchmarking, and stress testing DNS servers and networks. It supports IPv4, IPv6, UDP and TCP, and has a modular system for generating queries used in the tests.
 
-It was built as an alternative to dnsperf (https://nominum.com/measurement-tools/), and many of the command line options are compatible.
+Originally built as an alternative to dnsperf (https://github.com/DNS-OARC/dnsperf), many of the command line options are compatible.
 
 Dependencies
 ------------
@@ -69,9 +69,9 @@ Flame target, port 5300, TCP:
 flame -p 5300 -P tcp target.test.com
 ```
 
-Flame target, port 443, TCPTLS:
+Flame target, port 443, DoT (tcptls):
 ```
-flame -p 443 -P tcptls target.test.com
+flame -p 443 -P dot target.test.com
 ```
 
 Flame target with random labels:
