@@ -267,11 +267,10 @@ void QueryGenerator::new_rec(uint8_t **dest, size_t *dest_len, const char *qname
     ldns_pkt_set_edns_udp_size(query, EDNS_BUFFER_SIZE);
     ldns_pkt_set_edns_do(query, _dnssec);
 
-    if (!prefix.empty()) {
-        // todo: move string parsing to file gen; validate mask <32
-        auto slashpos = prefix.find('/');
-        auto cidr = prefix.substr(0, slashpos); // todo: copies...
-        uint8_t mask = std::stoi(prefix.substr(slashpos+1, prefix.size()));
+    auto prefix_split = split(prefix, '/');
+    if (prefix_split.size() == 2) {
+        auto cidr = prefix_split[0];
+        uint8_t mask = std::stoi(prefix_split[1]);
 
         bool ipv6 = false;
         struct sockaddr_in sa;
@@ -286,10 +285,10 @@ void QueryGenerator::new_rec(uint8_t **dest, size_t *dest_len, const char *qname
         int numbytes = (mask + (CHAR_BIT - 1)) / CHAR_BIT;
         uint16_t optionlen = 4 + numbytes;
 
-        // https://tools.ietf.org/html/rfc7871; todo: struct
+        // https://tools.ietf.org/html/rfc7871;
         int idx = 0;
         int buflen = optionlen + 4; // add 2 bytes each for option code/optionlen fields
-        uint8_t *buf = (uint8_t *)malloc(buflen); // todo: check malloc
+        uint8_t *buf = (uint8_t *)malloc(buflen);
         buf[idx++] = 0x00; // option-code msb
         buf[idx++] = 0x08; // option-code lsb
         buf[idx++] = optionlen >> 16; //option-len msb
@@ -357,7 +356,6 @@ FileQueryGenerator::FileQueryGenerator(std::shared_ptr<Config> c,
         if (result.size() == 3) {
             push_rec(std::move(result[1].str()), result[2].str(), false);
         } else if (result.size() == 4) {
-            // todo: rewrite push_rec for less copying and do std::moves here
             push_rec(std::move(result[1].str()), result[2].str(), result[3].str(), false);
         }
     }
