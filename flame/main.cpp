@@ -22,8 +22,8 @@
 static const char USAGE[] =
     R"(Flamethrower.
     Usage:
-      flame [-q QCOUNT] [-c TCOUNT] [-p PORT] [-d DELAY_MS] [-r RECORD] [-T QTYPE] [-o FILE]
-            [-l LIMIT_SECS] [-t TIMEOUT] [-F FAMILY] [-f FILE] [-n LOOP] [-P PROTOCOL]
+      flame [-b BIND_IP] [-q QCOUNT] [-c TCOUNT] [-p PORT] [-d DELAY_MS] [-r RECORD] [-T QTYPE]
+            [-o FILE] [-l LIMIT_SECS] [-t TIMEOUT] [-F FAMILY] [-f FILE] [-n LOOP] [-P PROTOCOL]
             [-Q QPS] [-g GENERATOR] [-v VERBOSITY] [-R] [--class CLASS] [--qps-flow SPEC]
             [--dnssec] [--targets FILE]
             TARGET [GENOPTS]...
@@ -40,6 +40,7 @@ static const char USAGE[] =
       -h --help        Show this screen
       --version        Show version
       --class CLASS    Default query class, defaults to IN. May also be CH [default: IN]
+      -b BIND_IP       IP address to bind to [default: 0.0.0.0 for inet, ::0 for inet6]
       -c TCOUNT        Number of concurrent traffic generators per process [default: 10]
       -d DELAY_MS      ms delay between each traffic generator's query [default: 1]
       -q QCOUNT        Number of queries to send every DELAY ms [default: 10]
@@ -228,6 +229,20 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    if (!args["-b"]) {
+        if (family == AF_INET)
+            args["-b"] = std::string("0.0.0.0");
+        else
+            args["-b"] = std::string("::0");
+    }
+    auto bind_ip = args["-b"].asString();
+    auto bind_ip_request = loop->resource<uvw::GetAddrInfoReq>();
+    auto bind_ip_resolved = bind_ip_request->addrInfoSync(bind_ip, "0");
+    if (!bind_ip_resolved.first) {
+        std::cerr << "unable to resolve bind ip address: " << bind_ip << std::endl;
+        return 1;
+    }
+
     std::vector<std::string> raw_target_list;
     if (args["TARGET"].asString() == "file" && args["--targets"]) {
         std::ifstream inFile(args["--targets"].asString());
@@ -333,6 +348,7 @@ int main(int argc, char *argv[])
     auto traf_config = std::make_shared<TrafGenConfig>();
     traf_config->batch_count = b_count;
     traf_config->family = family;
+    traf_config->bind_ip = bind_ip;
     traf_config->target_address = target_list;
     traf_config->port = static_cast<unsigned int>(args["-p"].asLong());
     traf_config->s_delay = s_delay;
@@ -411,6 +427,7 @@ int main(int argc, char *argv[])
     sigterm->start(SIGTERM);
 
     if (config->verbosity()) {
+        std::cout << "binding to " << traf_config->bind_ip << std::endl;
         std::cout << "flaming target(s) [";
         for (uint i = 0; i < 3; i++) {
             std::cout << traf_config->target_address[i];

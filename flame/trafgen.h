@@ -24,6 +24,7 @@ struct TrafGenConfig {
     std::vector<std::string> target_address;
     unsigned int _current_target{0};
     int family{0};
+    std::string bind_ip;
     unsigned int port{53};
     int r_timeout{3};
     long s_delay{1};

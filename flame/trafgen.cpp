@@ -65,13 +65,15 @@ void TrafGen::start_udp()
     _udp_handle = _loop->resource<uvw::UDPHandle>(_traf_config->family);
 
     _udp_handle->on<uvw::ErrorEvent>([this](const uvw::ErrorEvent &e, uvw::UDPHandle &) {
+        if (0 == strcmp(e.name(), "EADDRNOTAVAIL"))
+            throw std::runtime_error("unable to bind to ip address: " + _traf_config->bind_ip);
         _metrics->net_error();
     });
 
     if (_traf_config->family == AF_INET) {
-        _udp_handle->bind<uvw::IPv4>("0.0.0.0", 0);
+        _udp_handle->bind<uvw::IPv4>(_traf_config->bind_ip, 0);
     } else {
-        _udp_handle->bind<uvw::IPv6>("::0", 0, uvw::UDPHandle::Bind::IPV6ONLY);
+        _udp_handle->bind<uvw::IPv6>(_traf_config->bind_ip, 0, uvw::UDPHandle::Bind::IPV6ONLY);
     }
 
     _metrics->trafgen_id(_udp_handle->sock().port);
@@ -92,9 +94,9 @@ void TrafGen::start_tcp_session()
     _tcp_handle = _loop->resource<uvw::TcpHandle>(_traf_config->family);
 
     if (_traf_config->family == AF_INET) {
-        _tcp_handle->bind<uvw::IPv4>("0.0.0.0", 0);
+        _tcp_handle->bind<uvw::IPv4>(_traf_config->bind_ip, 0);
     } else {
-        _tcp_handle->bind<uvw::IPv6>("::0", 0, uvw::TcpHandle::Bind::IPV6ONLY);
+        _tcp_handle->bind<uvw::IPv6>(_traf_config->bind_ip, 0, uvw::TcpHandle::Bind::IPV6ONLY);
     }
 
     _metrics->trafgen_id(_tcp_handle->sock().port);
