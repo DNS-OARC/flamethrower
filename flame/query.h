@@ -48,8 +48,9 @@ protected:
     ldns_rr_type cvt_qtype(const std::string &t);
 
     void new_rec(uint8_t **dest, size_t *dest_len, const char *qname, size_t len,
-        const std::string &qtype, bool binary, uint16_t id = 0);
+        const std::string &qtype, const std::string &prefix, bool binary, uint16_t id = 0);
     void push_rec(const char *qname, size_t len, const std::string &qtype, bool binary);
+    void push_rec(const std::string &qname, const std::string &qtype, const std::string &prefix, bool binary);
     void push_rec(const std::string &qname, const std::string &qtype, bool binary);
 
 public:

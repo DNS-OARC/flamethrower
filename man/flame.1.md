@@ -30,6 +30,9 @@ Target can be either an IP address or host name which will be resolved first.
 
 ## Options
 
+-b *BIND_IP*
+: IP address to bind to. Default is 0.0.0.0 for inet or ::0 for inet6.
+
 -q *QCOUNT*
 : Number of queries to send every *DELAY_MS* interval. Default is 10.
 
