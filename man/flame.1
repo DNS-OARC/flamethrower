@@ -28,6 +28,10 @@ Target can be either an IP address or host name which will be resolved
 first.
 .SS Options
 .TP
+.B -b \f[I]BIND_IP\f[R]
+IP address to bind to.
+Default is 0.0.0.0 for inet or ::0 for inet6.
+.TP
 .B -q \f[I]QCOUNT\f[R]
 Number of queries to send every \f[I]DELAY_MS\f[R] interval.
 Default is 10.
