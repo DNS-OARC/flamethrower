@@ -52,9 +52,9 @@ static const char USAGE[] =
       -r RECORD        The base record to use as the DNS query for generators [default: test.com]
       -T QTYPE         The query type to use for generators [default: A]
       -f FILE          Read records from FILE, one per row, QNAME TYPE
-      -p PORT          Which port to flame [defaults: 53, 853 for tcptls]
+      -p PORT          Which port to flame [defaults: 53, 853 for DoT]
       -F FAMILY        Internet family (inet/inet6) [default: inet]
-      -P PROTOCOL      Protocol to use (udp/tcp/tcptls) [default: udp]
+      -P PROTOCOL      Protocol to use (udp/tcp/dot) [default: udp]
       -g GENERATOR     Generate queries with the given generator [default: static]
       -o FILE          Metrics output file, JSON format
       -v VERBOSITY     How verbose output should be, 0 is silent [default: 1]
@@ -194,8 +194,14 @@ int main(int argc, char *argv[])
     long c_count = args["-c"].asLong();
 
     Protocol proto{Protocol::UDP};
-    if (args["-P"].asString() == "tcp" || args["-P"].asString() == "tcptls") {
-        proto = (args["-P"].asString() == "tcptls") ? Protocol::TCPTLS : Protocol::TCP;
+    // note: tcptls is available as a deprecated alternative to dot
+    if (args["-P"].asString() == "tcp" || args["-P"].asString() == "dot" || args["-P"].asString() == "tcptls") {
+        if (args["-P"].asString() == "dot" || args["-P"].asString() == "tcptls") {
+            proto = Protocol::DOT;
+        }
+        else if (args["-P"].asString() == "tcp") {
+            proto = Protocol::TCP;
+        }
         if (!arg_exists("-d", argc, argv))
             s_delay = 1000;
         if (!arg_exists("-q", argc, argv))
@@ -205,12 +211,12 @@ int main(int argc, char *argv[])
     } else if (args["-P"].asString() == "udp") {
         proto = Protocol::UDP;
     } else {
-        std::cerr << "protocol must be 'udp', 'tcp' or 'tcptls'" << std::endl;
+        std::cerr << "protocol must be 'udp', 'tcp' or 'dot'" << std::endl;
         return 1;
     }
 
     if (!args["-p"]) {
-        if (proto == Protocol::TCPTLS)
+        if (proto == Protocol::DOT)
             args["-p"] = std::string("853");
         else
             args["-p"] = std::string("53");

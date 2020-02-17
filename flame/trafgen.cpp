@@ -145,7 +145,7 @@ void TrafGen::start_tcp_session()
     };
 
     // For now, treat a TLS handshake failure as malformed data
-    _tcp_session = (_traf_config->protocol == Protocol::TCPTLS)
+    _tcp_session = (_traf_config->protocol == Protocol::DOT)
         ? std::make_shared<TCPTLSSession>(_tcp_handle, malformed_data, got_dns_message, connection_ready, malformed_data)
         : std::make_shared<TCPSession>(_tcp_handle, malformed_data, got_dns_message, connection_ready);
 
@@ -294,7 +294,7 @@ void TrafGen::start()
         _sender_timer->on<uvw::TimerEvent>([this](const uvw::TimerEvent &event, uvw::TimerHandle &h) {
             if (_traf_config->protocol == Protocol::UDP) {
                 udp_send();
-            } else if (_traf_config->protocol == Protocol::TCP || _traf_config->protocol == Protocol::TCPTLS) {
+            } else if (_traf_config->protocol == Protocol::TCP || _traf_config->protocol == Protocol::DOT) {
                 start_tcp_session();
             }
         });
