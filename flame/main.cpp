@@ -40,7 +40,7 @@ static const char USAGE[] =
       -h --help        Show this screen
       --version        Show version
       --class CLASS    Default query class, defaults to IN. May also be CH [default: IN]
-      -b BIND_IP       IP address to bind to [default: 0.0.0.0 for inet, ::0 for inet6]
+      -b BIND_IP       IP address to bind to [defaults: 0.0.0.0 for inet, ::0 for inet6]
       -c TCOUNT        Number of concurrent traffic generators per process [default: 10]
       -d DELAY_MS      ms delay between each traffic generator's query [default: 1]
       -q QCOUNT        Number of queries to send every DELAY ms [default: 10]
