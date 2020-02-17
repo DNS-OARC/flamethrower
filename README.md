@@ -14,7 +14,7 @@ This code is released under Apache License 2.0. You can find terms and condition
 Overview
 --------
 
-Flamethrower is a small, fast, configurable tool for functional testing, benchmarking, and stress testing DNS servers and networks. It supports IPv4, IPv6, UDP and TCP, and has a modular system for generating queries used in the tests.
+Flamethrower is a small, fast, configurable tool for functional testing, benchmarking, and stress testing DNS servers and networks. It supports IPv4, IPv6, UDP, TCP, and DoT and has a modular system for generating queries used in the tests.
 
 Originally built as an alternative to dnsperf (https://github.com/DNS-OARC/dnsperf), many of the command line options are compatible.
 
@@ -69,7 +69,7 @@ Flame target, port 5300, TCP:
 flame -p 5300 -P tcp target.test.com
 ```
 
-Flame target, port 443, DoT (tcptls):
+Flame target, port 443, DoT:
 ```
 flame -p 443 -P dot target.test.com
 ```

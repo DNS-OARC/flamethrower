@@ -16,13 +16,12 @@ flame \--version
 
 # DESCRIPTION
 
-Flamethrower is a small, fast, configurable tool for functional testing,
-benchmarking, and stress testing DNS servers and networks. It supports IPv4,
-IPv6, UDP and TCP, and has a modular system for generating queries used in the
-tests.
+Flamethrower is a small, fast, configurable tool for functional testing, benchmarking, 
+and stress testing DNS servers and networks. It supports IPv4, IPv6, UDP, TCP, and DoT and 
+has a modular system for generating queries used in the tests.
 
-It was built as an alternative to [dnsperf](https://github.com/DNS-OARC/dnsperf)
-and many of the command line options are compatible.
+Originally built as an alternative to dnsperf (https://github.com/DNS-OARC/dnsperf), 
+many of the command line options are compatible.
 
 ## Target
 
@@ -72,7 +71,7 @@ Target can be either an IP address or host name which will be resolved first.
 -R
 : Randomize the query list before sending. Default is false.
 
--P ( udp | tcp )
+-P ( udp | tcp | dot )
 : Protocol to use. Default is udp.
 
 -Q *QPS*
