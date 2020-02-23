@@ -16,12 +16,12 @@ flame --version
 .PP
 Flamethrower is a small, fast, configurable tool for functional testing,
 benchmarking, and stress testing DNS servers and networks.
-It supports IPv4, IPv6, UDP and TCP, and has a modular system for
+It supports IPv4, IPv6, UDP, TCP, and DoT and has a modular system for
 generating queries used in the tests.
 .PP
-It was built as an alternative to
-dnsperf (https://github.com/DNS-OARC/dnsperf) and many of the command
-line options are compatible.
+Originally built as an alternative to dnsperf
+(https://github.com/DNS-OARC/dnsperf), many of the command line options
+are compatible.
 .SS Target
 .PP
 Target can be either an IP address or host name which will be resolved
@@ -42,7 +42,7 @@ Default is 10.
 .TP
 .B -p \f[I]PORT\f[R]
 Which port to flame.
-Default is 53.
+Default is 53 for UDP/TCP, 443 for DoH and 853 for DoT.
 .TP
 .B -d \f[I]DELAY_MS\f[R]
 Delay between each traffic generator\[cq]s run in milliseconds.
@@ -84,7 +84,7 @@ Default is 1.
 Randomize the query list before sending.
 Default is false.
 .TP
-.B -P ( udp | tcp | tcptls | https )
+.B -P ( udp | tcp | dot | doh )
 Protocol to use.
 Default is udp.
 .TP
