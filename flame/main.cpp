@@ -53,10 +53,10 @@ static const char USAGE[] =
       -r RECORD        The base record to use as the DNS query for generators [default: test.com]
       -T QTYPE         The query type to use for generators [default: A]
       -f FILE          Read records from FILE, one per row, QNAME TYPE
-      -p PORT          Which port to flame [defaults: 53, 853 for DoT]
+      -p PORT          Which port to flame [defaults: 53, 443 for DoH, 853 for DoT]
       -F FAMILY        Internet family (inet/inet6) [default: inet]
-      -P PROTOCOL      Protocol to use (udp/tcp/dot/https) [default: udp]
-      -M HTTPMETHOD    HTTP method to use (POST/GET) when https is enabled [default: GET]
+      -P PROTOCOL      Protocol to use (udp/tcp/dot/doh) [default: udp]
+      -M HTTPMETHOD    HTTP method to use (POST/GET) when DoH is used [default: GET]
       -g GENERATOR     Generate queries with the given generator [default: static]
       -o FILE          Metrics output file, JSON format
       -v VERBOSITY     How verbose output should be, 0 is silent [default: 1]
@@ -197,11 +197,11 @@ int main(int argc, char *argv[])
 
     Protocol proto{Protocol::UDP};
     // note: tcptls is available as a deprecated alternative to dot
-    if (args["-P"].asString() == "tcp" || args["-P"].asString() == "dot" || args["-P"].asString() == "tcptls" || args["-P"].asString() == "https") {
+    if (args["-P"].asString() == "tcp" || args["-P"].asString() == "dot" || args["-P"].asString() == "tcptls" || args["-P"].asString() == "doh") {
         if (args["-P"].asString() == "dot" || args["-P"].asString() == "tcptls") {
             proto = Protocol::DOT;
-        } else if (args["-P"].asString() == "https") {
-            proto = Protocol::HTTPS;
+        } else if (args["-P"].asString() == "doh") {
+            proto = Protocol::DOH;
         } else {
             proto = Protocol::TCP;
         }
@@ -214,14 +214,14 @@ int main(int argc, char *argv[])
     } else if (args["-P"].asString() == "udp") {
         proto = Protocol::UDP;
     } else {
-        std::cerr << "protocol must be 'udp', 'tcp', dot' or 'https'" << std::endl;
+        std::cerr << "protocol must be 'udp', 'tcp', dot' or 'doh'" << std::endl;
         return 1;
     }
 
     if (!args["-p"]) {
         if (proto == Protocol::DOT)
             args["-p"] = std::string("853");
-        else if (proto == Protocol::HTTPS)
+        else if (proto == Protocol::DOH)
             args["-p"] = std::string("443");
         else
             args["-p"] = std::string("53");

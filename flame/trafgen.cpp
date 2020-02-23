@@ -131,7 +131,7 @@ void TrafGen::start_tcp_session()
             _in_flight[id].send_time = std::chrono::high_resolution_clock::now();
 
             // Send one by one with DoH
-            if(_traf_config->protocol == Protocol::HTTPS) {
+            if(_traf_config->protocol == Protocol::DOH) {
                 auto qt = (_traf_config->method == HTTPMethod::GET)
                     ? _qgen->next_base64url(id_list[i])
                     : _qgen->next_udp(id_list[i]);
@@ -146,7 +146,7 @@ void TrafGen::start_tcp_session()
             return;
         }
 
-        if(_traf_config->protocol != Protocol::HTTPS) {
+        if(_traf_config->protocol != Protocol::DOH) {
             auto qt = _qgen->next_tcp(id_list);
 
             // async send the batch. fires WriteEvent when finished sending.
@@ -311,7 +311,7 @@ void TrafGen::start()
         _sender_timer->on<uvw::TimerEvent>([this](const uvw::TimerEvent &event, uvw::TimerHandle &h) {
             if (_traf_config->protocol == Protocol::UDP) {
                 udp_send();
-            } else if (_traf_config->protocol == Protocol::TCP || _traf_config->protocol == Protocol::DOT || _traf_config->protocol == Protocol::HTTPS) {
+            } else if (_traf_config->protocol == Protocol::TCP || _traf_config->protocol == Protocol::DOT || _traf_config->protocol == Protocol::DOH) {
                 start_tcp_session();
             }
         });

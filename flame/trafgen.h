@@ -19,8 +19,8 @@
 
 enum class Protocol {
     UDP,
-    HTTPS,
     TCP,
+    DOH,
     DOT,
 };
 

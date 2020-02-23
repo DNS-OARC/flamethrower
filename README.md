@@ -76,12 +76,12 @@ flame -p 443 -P dot target.test.com
 
 Flame target, DNS over HTTPS GET:
 ```
-flame -P https target.test.com/dns-query
+flame -P doh target.test.com/dns-query
 ```
 
 Flame target, DNS over HTTPS POST:
 ```
-flame -P https -M POST target.test.com/dns-query
+flame -P doh -M POST target.test.com/dns-query
 ```
 
 Flame target with random labels:
