@@ -327,6 +327,9 @@ int main(int argc, char *argv[])
         qgen->set_qname(args["-r"].asString());
         qgen->set_qtype(args["-T"].asString());
         qgen->init();
+        if (!qgen->synthesizedQueries() && qgen->size() == 0) {
+            throw std::runtime_error("no queries were generated");
+        }
     } catch (const std::exception &e) {
         std::cerr << "generator error: " << e.what() << std::endl;
         return 1;

@@ -315,14 +315,14 @@ void QueryGenerator::push_rec(const char *qname, size_t len, const std::string &
 {
 
     WireTpt w;
-    new_rec(&w.first, &w.second, qname, len, qtype, "", binary);
+    new_rec(&w.first, &w.second, qname, len, qtype, "", binary, 0);
     _wire_buffers.push_back(w);
 }
 
 void QueryGenerator::push_rec(const std::string &qname, const std::string &qtype, const std::string &prefix, bool binary)
 {
     WireTpt w;
-    new_rec(&w.first, &w.second, qname.c_str(), qname.length(), qtype, prefix, binary);
+    new_rec(&w.first, &w.second, qname.c_str(), qname.length(), qtype, prefix, binary, 0);
     _wire_buffers.push_back(w);
 }
 
@@ -627,7 +627,7 @@ QueryGenerator::QueryTpt NumberNameQueryGenerator::next_udp(uint16_t id)
     n = _namedist(_generator);
     qname << n << '.' << _qname;
 
-    new_rec(&buf, &buf_len, qname.str().c_str(), qname.str().length(), _qtype, false, id);
+    new_rec(&buf, &buf_len, qname.str().c_str(), qname.str().length(), _qtype, "", false, id);
 
     auto ret_buf = std::make_unique<char[]>(buf_len);
     memcpy(ret_buf.get(), buf, buf_len);
