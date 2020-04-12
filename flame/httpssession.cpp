@@ -100,7 +100,7 @@ static int on_data_chunk_recv_callback(nghttp2_session *session, uint8_t flags,
     HTTPSSession *class_session = (HTTPSSession *)user_data;
     auto req = nghttp2_session_get_stream_user_data(session, stream_id);
     if (!req) {
-        std::cout << "no stream data, on data chunk" << std::endl;
+        std::cerr << "No stream data on data chunk" << std::endl;
         return 0;
     }
     class_session->process_receive(data, len);
@@ -111,7 +111,7 @@ static int on_stream_close_callback(nghttp2_session *session, int32_t stream_id,
 {
     http2_stream_data *stream_data = static_cast<http2_stream_data *>(nghttp2_session_get_stream_user_data(session, stream_id));
     if (!stream_data) {
-        std::cout << "no stream data, stream close" << std::endl;
+        std::cerr << "No stream data on stream close" << std::endl;
         return 0;
     }
     nghttp2_session_terminate_session(session, NGHTTP2_NO_ERROR);
@@ -186,7 +186,7 @@ void HTTPSSession::send_settings()
     int val;
     val = nghttp2_submit_settings(_current_session, NGHTTP2_FLAG_NONE, settings, ARRLEN(settings));
     if (val != 0) {
-        std::cout << "Could not submit SETTINGS: " << nghttp2_strerror(val) << std::endl;
+        std::cerr << "Could not submit SETTINGS frame: " << nghttp2_strerror(val) << std::endl;
     }
 }
 
@@ -194,7 +194,7 @@ void HTTPSSession::receive_response(const char data[], size_t len)
 {
     ssize_t stream_id = nghttp2_session_mem_recv(_current_session, (const uint8_t *) data, len);
     if (stream_id < 0) {
-        std::cout << "Could not get HTTP request: " << nghttp2_strerror(stream_id);
+        std::cerr << "Could not get HTTP request: " << nghttp2_strerror(stream_id);
         close();
         return;
     }
@@ -205,7 +205,7 @@ int HTTPSSession::session_send()
     int rv;
     rv = nghttp2_session_send(_current_session);
     if (rv != 0) {
-        std::cout << "Fatal error: " << nghttp2_strerror(rv);
+        std::cerr << "HTTP2 fatal error: " << nghttp2_strerror(rv);
         return -1;
     }
     return 0;
@@ -261,7 +261,7 @@ void HTTPSSession::write(std::unique_ptr<char[]> data, size_t len)
         stream_id = nghttp2_submit_request(_current_session, NULL, hdrs, ARRLEN(hdrs), &provider, stream_data);
     }
     if (stream_id < 0) {
-        std::cout << "Could not submit HTTP request: " << nghttp2_strerror(stream_id);
+        std::cerr << "Could not submit HTTP request: " << nghttp2_strerror(stream_id);
     }
 
     stream_data->id = stream_id;
@@ -307,7 +307,7 @@ void HTTPSSession::send_tls(void* data, size_t len)
 {
     ssize_t sent = gnutls_record_send(_gnutls_session, data, len);
     if(sent <= 0) {
-        std::cerr << "failed in sending data" << std::endl;
+        std::cerr << "HTTP2 failed in sending data" << std::endl;
     }
 }
 
