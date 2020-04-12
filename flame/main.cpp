@@ -201,7 +201,12 @@ int main(int argc, char *argv[])
         if (args["-P"].asString() == "dot" || args["-P"].asString() == "tcptls") {
             proto = Protocol::DOT;
         } else if (args["-P"].asString() == "doh") {
+#ifdef DOH_ENABLE
             proto = Protocol::DOH;
+#else
+			std::cerr << "DNS over HTTPS (DoH) support is not enabled" << std::endl;
+			return 1;
+#endif
         } else {
             proto = Protocol::TCP;
         }
@@ -221,16 +226,20 @@ int main(int argc, char *argv[])
     if (!args["-p"]) {
         if (proto == Protocol::DOT)
             args["-p"] = std::string("853");
+#ifdef DOH_ENABLE
         else if (proto == Protocol::DOH)
             args["-p"] = std::string("443");
+#endif
         else
             args["-p"] = std::string("53");
     }
 
+#ifdef DOH_ENABLE
     HTTPMethod method{HTTPMethod::GET};
     if(args["-M"].asString() == "POST") {
         method = HTTPMethod::POST;
     }
+#endif
 
     auto runtime_limit = args["-l"].asLong();
 
@@ -384,7 +393,9 @@ int main(int argc, char *argv[])
     traf_config->port = static_cast<unsigned int>(args["-p"].asLong());
     traf_config->s_delay = s_delay;
     traf_config->protocol = proto;
+#ifdef DOH_ENABLE
     traf_config->method = method;
+#endif
     traf_config->r_timeout = args["-t"].asLong();
 
     std::vector<std::shared_ptr<TrafGen>> throwers;

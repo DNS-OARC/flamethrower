@@ -4,7 +4,10 @@
 #include <nghttp2/nghttp2.h>
 #include <url_parser.h>
 
+#ifdef DOH_ENABLE
 #include "base64.h"
+#endif
+
 #include "tcpsession.h"
 #include "http.h"
 #include "target.h"

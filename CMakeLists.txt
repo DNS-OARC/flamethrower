@@ -46,61 +46,95 @@ find_package(PkgConfig)
 include(sanitizer)
 
 pkg_search_module(LIBLDNS REQUIRED libldns ldns)
-pkg_search_module(LIBNGHTTP2 REQUIRED nghttp2 libnghttp2)
 pkg_check_modules(LIBUV REQUIRED libuv>=1.23)
 pkg_check_modules(LIBGNUTLS REQUIRED gnutls>=3.3)
+
+option(DOH_ENABLE "Enable DNS over HTTPS (DoH) support" OFF)
+if (DOH_ENABLE)
+    pkg_search_module(LIBNGHTTP2 REQUIRED nghttp2 libnghttp2)
+    message(STATUS "DNS over HTTPS (DoH) support is enabled")
+else ()
+    message(STATUS "DNS over HTTPS (DoH) support is disabled")
+endif()
 
 # ::-------------------------------------------------------------------------:: 
 # BUILD TARGETS
 # ::-------------------------------------------------------------------------:: 
 
-add_library(flamecore
+set(flamecore_src
+    flame/metrics.cpp
+    flame/metrics.h
+    flame/query.cpp
+    flame/query.h
+    flame/target.h
+    flame/trafgen.cpp
+    flame/trafgen.h
+    flame/tcpsession.cpp
+    flame/tcpsession.h
+    flame/tcptlssession.cpp
+    flame/tcptlssession.h
+    flame/utils.cpp
+    flame/utils.h
+    )
+
+set(flamecore_dirs
+    PUBLIC ${LIBUV_INCLUDE_DIRS}
+    PUBLIC ${LIBLDNS_INCLUDE_DIRS}
+    PRIVATE ${LIBGNUTLS_INCLUDE_DIRS}
+    PUBLIC "${CMAKE_SOURCE_DIR}/3rd/docopt.cpp"
+    PUBLIC "${CMAKE_SOURCE_DIR}/3rd/json"
+    PUBLIC "${CMAKE_SOURCE_DIR}/3rd/url-parser"
+    PUBLIC "${CMAKE_SOURCE_DIR}/3rd/uvw"
+    )
+
+set(flamecore_libs
+    PRIVATE ${LIBUV_LDFLAGS}
+    PRIVATE ${LIBUV_LIBRARIES}
+    PRIVATE ${LIBLDNS_LDFLAGS}
+    PRIVATE ${LIBLDNS_LIBRARIES}
+    PRIVATE ${LIBGNUTLS_LDFLAGS}
+    PRIVATE ${LIBGNUTLS_LIBRARIES}
+    )
+
+set(flame_execs
+    3rd/docopt.cpp/docopt.cpp
+    3rd/url-parser/url_parser.c
+    flame/main.cpp
+    )
+
+if (DOH_ENABLE)
+    set(flamecore_src 
+        ${flamecore_src}
         flame/http.h
         flame/httpssession.cpp
         flame/httpssession.h
-        flame/metrics.cpp
-        flame/metrics.h
-        flame/query.cpp
-        flame/query.h
-        flame/target.h
-        flame/trafgen.cpp
-        flame/trafgen.h
-        flame/tcpsession.cpp
-        flame/tcpsession.h
-        flame/tcptlssession.cpp
-        flame/tcptlssession.h
-        flame/utils.cpp flame/utils.h)
-
-target_include_directories(flamecore
-        PUBLIC ${LIBUV_INCLUDE_DIRS}
-        PUBLIC ${LIBLDNS_INCLUDE_DIRS}
-        PRIVATE ${LIBGNUTLS_INCLUDE_DIRS}
-        PRIVATE ${LIBNGHTTP2_INCLUDE_DIRS}
-        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/base64url"
-        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/TokenBucket"
-        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/docopt.cpp"
-        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/json"
-        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/url-parser"
-        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/uvw"
         )
 
-target_link_libraries(flamecore
-        PRIVATE ${LIBUV_LDFLAGS}
-        PRIVATE ${LIBUV_LIBRARIES}
-        PRIVATE ${LIBLDNS_LDFLAGS}
-        PRIVATE ${LIBLDNS_LIBRARIES}
-        PRIVATE ${LIBGNUTLS_LDFLAGS}
-        PRIVATE ${LIBGNUTLS_LIBRARIES}
+    set(flamecore_dirs
+        ${flamecore_dirs}
+        PRIVATE ${LIBNGHTTP2_INCLUDE_DIRS}
+        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/base64url"
+        )
+
+    set(flamecore_libs
+        ${flamecore_libs}
         PRIVATE ${LIBNGHTTP2_LDFLAGS}
         PRIVATE ${LIBNGHTTP2_LIBRARIES}
         )
 
-add_executable(flame
+    set(flame_execs
+        ${flame_execs}
         3rd/base64url/base64.cpp
-        3rd/docopt.cpp/docopt.cpp
-        3rd/url-parser/url_parser.c
-        flame/main.cpp
         )
+endif()
+
+add_library(flamecore ${flamecore_src})
+
+target_include_directories(flamecore ${flamecore_dirs})
+
+target_link_libraries(flamecore ${flamecore_libs})
+
+add_executable(flame ${flame_execs})
 
 target_link_libraries(flame
         PRIVATE flamecore

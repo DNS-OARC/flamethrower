@@ -141,6 +141,7 @@ void QueryGenerator::set_args(const std::vector<std::string> &args)
     }
 }
 
+#ifdef DOH_ENABLE
 QueryGenerator::QueryTpt QueryGenerator::next_base64url(uint16_t id)
 {
     WireTpt w = _wire_buffers[_reqs++ % _wire_buffers.size()];
@@ -155,6 +156,7 @@ QueryGenerator::QueryTpt QueryGenerator::next_base64url(uint16_t id)
     memcpy(encoded_buf.get(), encoded.c_str(), encoded_len);
     return std::make_tuple(std::move(encoded_buf), encoded_len);
 }
+#endif
 
 QueryGenerator::QueryTpt QueryGenerator::next_tcp(const std::vector<uint16_t> &id_list)
 {

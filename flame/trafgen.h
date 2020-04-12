@@ -7,8 +7,12 @@
 #include <vector>
 
 #include "config.h"
+
+#ifdef DOH_ENABLE
 #include "http.h"
 #include "httpssession.h"
+#endif
+
 #include "metrics.h"
 #include "query.h"
 #include "target.h"
@@ -20,7 +24,9 @@
 enum class Protocol {
     UDP,
     TCP,
+#ifdef DOH_ENABLE
     DOH,
+#endif
     DOT,
 };
 
@@ -34,7 +40,9 @@ struct TrafGenConfig {
     long s_delay{1};
     long batch_count{10};
     Protocol protocol{Protocol::UDP};
+#ifdef DOH_ENABLE
     HTTPMethod method{HTTPMethod::POST};
+#endif
     const Target& next_target()
     {
         const Target& next = target_list[_current_target];

@@ -11,7 +11,10 @@
 #include <tuple>
 #include <vector>
 
+#ifdef DOH_ENABLE
 #include "base64.h"
+#endif
+
 #include "config.h"
 #include <ldns/rr.h>
 
@@ -65,7 +68,9 @@ public:
 
     virtual void init() = 0;
 
+#ifdef DOH_ENABLE
     virtual QueryTpt next_base64url(uint16_t);
+#endif
     virtual QueryTpt next_udp(uint16_t);
     virtual QueryTpt next_tcp(const std::vector<uint16_t> &);
     bool finished();
