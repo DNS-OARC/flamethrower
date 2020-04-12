@@ -130,6 +130,7 @@ void TrafGen::start_tcp_session()
             // by the time DataEvent fires, and we don't want a race there
             _in_flight[id].send_time = std::chrono::high_resolution_clock::now();
 
+#ifdef DOH_ENABLE
             // Send one by one with DoH
             if(_traf_config->protocol == Protocol::DOH) {
                 auto qt = (_traf_config->method == HTTPMethod::GET)
@@ -138,6 +139,7 @@ void TrafGen::start_tcp_session()
                 _tcp_session->write(std::move(std::get<0>(qt)), std::get<1>(qt));
                 _metrics->send(std::get<1>(qt), 1, _in_flight.size());
             }
+#endif
         }
 
         if (id_list.size() == 0) {
@@ -146,15 +148,18 @@ void TrafGen::start_tcp_session()
             return;
         }
 
+#ifdef DOH_ENABLE
         if(_traf_config->protocol != Protocol::DOH) {
+#endif
             auto qt = _qgen->next_tcp(id_list);
 
             // async send the batch. fires WriteEvent when finished sending.
             _tcp_session->write(std::move(std::get<0>(qt)), std::get<1>(qt));
 
             _metrics->send(std::get<1>(qt), id_list.size(), _in_flight.size());
+#ifdef DOH_ENABLE
         }
-
+#endif
     };
 
     // For now, treat a TLS handshake failure as malformed data
@@ -162,10 +167,12 @@ void TrafGen::start_tcp_session()
         _tcp_session = std::make_shared<TCPSession>(_tcp_handle, malformed_data, got_dns_message, connection_ready);
     } else if(_traf_config->protocol == Protocol::DOT) {
         _tcp_session = std::make_shared<TCPTLSSession>(_tcp_handle, malformed_data, got_dns_message, connection_ready, malformed_data);
-    } else {
+    } 
+#ifdef DOH_ENABLE
+	else {
         _tcp_session = std::make_shared<HTTPSSession>(_tcp_handle, malformed_data, got_dns_message, connection_ready, malformed_data, current_target, _traf_config->method);
     }
-
+#endif
     if (!_tcp_session->setup()) {
         return;
     }
@@ -309,11 +316,14 @@ void TrafGen::start()
         start_udp();
         _sender_timer = _loop->resource<uvw::TimerHandle>();
         _sender_timer->on<uvw::TimerEvent>([this](const uvw::TimerEvent &event, uvw::TimerHandle &h) {
-            if (_traf_config->protocol == Protocol::UDP) {
-                udp_send();
-            } else if (_traf_config->protocol == Protocol::TCP || _traf_config->protocol == Protocol::DOT || _traf_config->protocol == Protocol::DOH) {
-                start_tcp_session();
-            }
+			switch(_traf_config->protocol) {
+				case Protocol::UDP: udp_send(); break;
+				case Protocol::TCP:
+#ifdef DOH_ENABLE
+				case Protocol::DOH:
+#endif
+				case Protocol::DOT: start_tcp_session(); break;
+			}
         });
         _sender_timer->start(uvw::TimerHandle::Time{1}, uvw::TimerHandle::Time{_traf_config->s_delay});
     } else {
