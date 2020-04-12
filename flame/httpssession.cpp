@@ -17,7 +17,6 @@ static ssize_t gnutls_push_trampoline(gnutls_transport_ptr_t h, const void *buf,
 }
 
 
-// TODO: Remove duplicate code between TLSSession and this class
 HTTPSSession::HTTPSSession(std::shared_ptr<uvw::TcpHandle> handle,
                            TCPSession::malformed_data_cb malformed_data_handler,
                            TCPSession::got_dns_msg_cb got_dns_msg_handler,
@@ -183,8 +182,7 @@ bool HTTPSSession::setup()
 
 void HTTPSSession::send_settings()
 {
-    //TODO: Find out why increasing this value still results in a maximum of 100 concurrent streams...
-    nghttp2_settings_entry settings[1] = { {NGHTTP2_SETTINGS_MAX_CONCURRENT_STREAMS, 100} };
+    nghttp2_settings_entry settings[1] = { {NGHTTP2_SETTINGS_MAX_CONCURRENT_STREAMS, (1U << 31) - 1} };
     int val;
     val = nghttp2_submit_settings(_current_session, NGHTTP2_FLAG_NONE, settings, ARRLEN(settings));
     if (val != 0) {
