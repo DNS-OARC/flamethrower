@@ -1,6 +1,7 @@
-FROM ubuntu:disco AS build
+FROM ubuntu:20.04 AS build
 
 ENV BUILD_DEPS "g++ cmake make libldns-dev libuv1-dev libgnutls28-dev pkgconf"
+ENV DEBIAN_FRONTEND=noninteractive
 
 RUN \
     apt-get update && \
@@ -15,7 +16,7 @@ RUN \
     make all tests && \
     ./tests
 
-FROM ubuntu:disco AS runtime
+FROM ubuntu:20.04 AS runtime
 
 ENV RUNTIME_DEPS "libldns2 libuv1"
 
