@@ -20,6 +20,7 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <sys/socket.h>
 
 // EDNS buffer size to avoid fragmentation on IPv6
 static constexpr uint16_t EDNS_BUFFER_SIZE = 1232;
