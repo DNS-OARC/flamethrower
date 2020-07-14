@@ -56,7 +56,7 @@ public:
     int gnutls_pull(void *buf, size_t len);
     int gnutls_push(const void *buf, size_t len);
 
-    http2_stream_data* create_http2_stream_data(std::unique_ptr<char[]> data, size_t len);
+    std::unique_ptr<http2_stream_data> create_http2_stream_data(std::unique_ptr<char[]> data, size_t len);
     void add_stream(http2_stream_data *stream_data);
     void remove_stream(http2_stream_data *stream_data); 
 
