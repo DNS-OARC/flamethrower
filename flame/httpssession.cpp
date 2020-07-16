@@ -234,20 +234,21 @@ void HTTPSSession::write(std::unique_ptr<char[]> data, size_t len)
 	nghttp2_data_provider provider = {};
 
 	std::string method = _method == HTTPMethod::GET ? "GET" : "POST";
+	std::string content = "application/dns-message";
 	std::vector<nghttp2_nv> hdrs {
 		HDR_S(":method", method),
 		HDR_S(":scheme", stream_data->scheme),
 		HDR_S(":authority", stream_data->authority),
 		HDR_S(":path", stream_data->path),
-		HDR_S("accept", std::string("application/dns-message"))
+		HDR_S("accept", content)
 	};
 	if(_method == HTTPMethod::POST) {
-		hdrs.push_back(HDR_S("content-type", std::string("application/dns-message")));
+		hdrs.push_back(HDR_S("content-type", content));
 		hdrs.push_back(HDR_S("content-length", std::to_string(len)));
 		provider.read_callback = post_data;
 	}
 
-	stream_id = nghttp2_submit_request(_current_session, NULL, hdrs.data(), ARRLEN(hdrs), &provider, stream_data.get());
+	stream_id = nghttp2_submit_request(_current_session, NULL, hdrs.data(), hdrs.size(), &provider, stream_data.get());
 	if (stream_id < 0) {
 		std::cerr << "Could not submit HTTP request: " << nghttp2_strerror(stream_id);
 	}
