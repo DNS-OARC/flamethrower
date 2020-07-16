@@ -18,14 +18,14 @@ static ssize_t gnutls_push_trampoline(gnutls_transport_ptr_t h, const void *buf,
 
 
 HTTPSSession::HTTPSSession(std::shared_ptr<uvw::TcpHandle> handle,
-						   TCPSession::malformed_data_cb malformed_data_handler,
-						   TCPSession::got_dns_msg_cb got_dns_msg_handler,
-						   TCPSession::connection_ready_cb connection_ready_handler,
-						   handshake_error_cb handshake_error_handler, 
-						   Target target,
-						   HTTPMethod method)
+			   TCPSession::malformed_data_cb malformed_data_handler,
+			   TCPSession::got_dns_msg_cb got_dns_msg_handler,
+			   TCPSession::connection_ready_cb connection_ready_handler,
+			   handshake_error_cb handshake_error_handler, 
+			   Target target,
+			   HTTPMethod method)
 	: TCPSession(handle, malformed_data_handler, got_dns_msg_handler, connection_ready_handler),
-	  _malformed_data{malformed_data_handler}, _got_dns_msg{got_dns_msg_handler}, _handle{handle}, _tls_state{LinkState::HANDSHAKE}, _handshake_error{handshake_error_handler}, _target{target}, _method{method}
+	  http2_state{STATE_HTTP2::WAIT_SETTINGS}, _malformed_data{malformed_data_handler}, _got_dns_msg{got_dns_msg_handler}, _handle{handle}, _tls_state{LinkState::HANDSHAKE}, _handshake_error{handshake_error_handler}, _target{target}, _method{method}
 {
 }
 
@@ -82,8 +82,8 @@ void HTTPSSession::process_receive(const uint8_t *data, size_t len) {
 }
 
 static int on_data_chunk_recv_callback(nghttp2_session *session, uint8_t flags,
-									   int32_t stream_id, const uint8_t *data,
-									   size_t len, void *user_data)
+				       int32_t stream_id, const uint8_t *data,
+				       size_t len, void *user_data)
 {
 	auto class_session = static_cast<HTTPSSession*>(user_data);
 	auto req = nghttp2_session_get_stream_user_data(session, stream_id);
@@ -106,6 +106,17 @@ static int on_stream_close_callback(nghttp2_session *session, int32_t stream_id,
 	return 0;
 }
 
+int on_frame_recv_callback(nghttp2_session *session,
+			    const nghttp2_frame *frame, void *user_data) {
+	auto class_session = static_cast<HTTPSSession*>(user_data);
+	switch(frame->hd.type) {
+		case NGHTTP2_SETTINGS:
+			class_session->settings_received();
+			break;
+	}
+	return 0;
+}
+
 void HTTPSSession::init_nghttp2()
 {
 	nghttp2_session_callbacks *callbacks;
@@ -113,6 +124,7 @@ void HTTPSSession::init_nghttp2()
 	nghttp2_session_callbacks_set_send_callback(callbacks, send_callback);
 	nghttp2_session_callbacks_set_on_data_chunk_recv_callback(callbacks, on_data_chunk_recv_callback);
 	nghttp2_session_callbacks_set_on_stream_close_callback(callbacks, on_stream_close_callback);
+	nghttp2_session_callbacks_set_on_frame_recv_callback(callbacks, on_frame_recv_callback);
 	nghttp2_session_client_new(&_current_session, callbacks, this);
 	nghttp2_session_callbacks_del(callbacks);
 }
@@ -146,7 +158,7 @@ bool HTTPSSession::setup()
 	}
 
 	ret = gnutls_credentials_set(_gnutls_session, GNUTLS_CRD_CERTIFICATE,
-								 _gnutls_cert_credentials);
+				     _gnutls_cert_credentials);
 	if (ret < 0) {
 		std::cerr << "GNUTLS failed to set system credentials" << gnutls_strerror(ret) << std::endl;
 		return false;
@@ -175,6 +187,14 @@ void HTTPSSession::send_settings()
 	val = nghttp2_submit_settings(_current_session, NGHTTP2_FLAG_NONE, settings, ARRLEN(settings));
 	if (val != 0) {
 		std::cerr << "Could not submit SETTINGS frame: " << nghttp2_strerror(val) << std::endl;
+	}
+}
+
+void HTTPSSession::settings_received()
+{
+	if (http2_state == STATE_HTTP2::WAIT_SETTINGS) {
+		TCPSession::on_connect_event();
+		http2_state = STATE_HTTP2::SENDING_DATA;
 	}
 }
 
@@ -221,10 +241,10 @@ static ssize_t post_data(nghttp2_session *session, int32_t stream_id, uint8_t *b
 }
 
 
-#define HDR_S(NAME, VALUE)                                  \
-	{                                                                   \
-		(uint8_t *)NAME, (uint8_t *)VALUE.c_str(), sizeof(NAME) - 1, VALUE.size(),  \
-			NGHTTP2_NV_FLAG_NONE                                        \
+#define HDR_S(NAME, VALUE)						\
+	{								\
+		(uint8_t *)NAME, (uint8_t *)VALUE.c_str(), sizeof(NAME) - 1, VALUE.size(), \
+			NGHTTP2_NV_FLAG_NONE				\
 			}
 
 void HTTPSSession::write(std::unique_ptr<char[]> data, size_t len)
@@ -318,7 +338,6 @@ void HTTPSSession::do_handshake()
 			std::cerr << "Cannot submit settings frame" << std::endl;
 		}
 		_tls_state = LinkState::DATA;
-		TCPSession::on_connect_event();
 	} else if (err < 0 && gnutls_error_is_fatal(err)) {
 		std::cerr << "Handshake failed: " << gnutls_strerror(err) << std::endl;
 		_handshake_error();

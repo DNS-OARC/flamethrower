@@ -20,7 +20,12 @@ struct http2_stream_data {
     std::string path;
     int32_t id;
     std::string data;
-}; 
+};
+
+enum STATE_HTTP2 {
+  WAIT_SETTINGS,
+  SENDING_DATA
+};
 
 class HTTPSSession : public TCPSession
 {
@@ -58,7 +63,9 @@ public:
 
     std::unique_ptr<http2_stream_data> create_http2_stream_data(std::unique_ptr<char[]> data, size_t len);
     void add_stream(http2_stream_data *stream_data);
-    void remove_stream(http2_stream_data *stream_data); 
+    void remove_stream(http2_stream_data *stream_data);
+
+    void settings_received();
 
 protected:
     void destroy_stream();
@@ -66,6 +73,7 @@ protected:
     void do_handshake();
 
 private:
+    STATE_HTTP2 http2_state;
     malformed_data_cb _malformed_data;
     got_dns_msg_cb _got_dns_msg;
     std::shared_ptr<uvw::TcpHandle> _handle;
