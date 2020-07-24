@@ -39,7 +39,7 @@ Target can be either an IP address or host name which will be resolved first.
 : Number of concurrent traffic generators per process. Default is 10.
 
 -p *PORT*
-: Which port to flame. Default is 53.
+: Which port to flame. Default is 53 for UDP/TCP, 443 for DoH and 853 for DoT.
 
 -d *DELAY_MS*
 : Delay between each traffic generator's run in milliseconds. Default is 1.
@@ -71,8 +71,11 @@ Target can be either an IP address or host name which will be resolved first.
 -R
 : Randomize the query list before sending. Default is false.
 
--P ( udp | tcp | dot )
+-P ( udp | tcp | dot | doh )
 : Protocol to use. Default is udp.
+
+-M ( GET | POST )
+: HTTP method to use for DNS over HTTPS. Default is GET.
 
 -Q *QPS*
 : Rate limit to a maximum queries per second, 0 is unlimited. Default is 0.

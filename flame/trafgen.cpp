@@ -91,6 +91,7 @@ void TrafGen::start_tcp_session()
     assert(_tcp_handle.get() == 0);
     assert(_tcp_session.get() == 0);
     assert(_finish_session_timer.get() == 0);
+    Target current_target = _traf_config->next_target();
     _tcp_handle = _loop->resource<uvw::TcpHandle>(_traf_config->family);
 
     if (_traf_config->family == AF_INET) {
@@ -128,6 +129,17 @@ void TrafGen::start_tcp_session()
             // might be better to do this after write (in WriteEvent) but it needs to be available
             // by the time DataEvent fires, and we don't want a race there
             _in_flight[id].send_time = std::chrono::high_resolution_clock::now();
+
+#ifdef DOH_ENABLE
+            // Send one by one with DoH
+            if(_traf_config->protocol == Protocol::DOH) {
+                auto qt = (_traf_config->method == HTTPMethod::GET)
+                    ? _qgen->next_base64url(id_list[i])
+                    : _qgen->next_udp(id_list[i]);
+                _tcp_session->write(std::move(std::get<0>(qt)), std::get<1>(qt));
+                _metrics->send(std::get<1>(qt), 1, _in_flight.size());
+            }
+#endif
         }
 
         if (id_list.size() == 0) {
@@ -136,19 +148,31 @@ void TrafGen::start_tcp_session()
             return;
         }
 
-        auto qt = _qgen->next_tcp(id_list);
+#ifdef DOH_ENABLE
+        if(_traf_config->protocol != Protocol::DOH) {
+#endif
+            auto qt = _qgen->next_tcp(id_list);
 
-        // async send the batch. fires WriteEvent when finished sending.
-        _tcp_session->write(std::move(std::get<0>(qt)), std::get<1>(qt));
+            // async send the batch. fires WriteEvent when finished sending.
+            _tcp_session->write(std::move(std::get<0>(qt)), std::get<1>(qt));
 
-        _metrics->send(std::get<1>(qt), id_list.size(), _in_flight.size());
+            _metrics->send(std::get<1>(qt), id_list.size(), _in_flight.size());
+#ifdef DOH_ENABLE
+        }
+#endif
     };
 
     // For now, treat a TLS handshake failure as malformed data
-    _tcp_session = (_traf_config->protocol == Protocol::DOT)
-        ? std::make_shared<TCPTLSSession>(_tcp_handle, malformed_data, got_dns_message, connection_ready, malformed_data)
-        : std::make_shared<TCPSession>(_tcp_handle, malformed_data, got_dns_message, connection_ready);
-
+    if(_traf_config->protocol == Protocol::TCP) {
+        _tcp_session = std::make_shared<TCPSession>(_tcp_handle, malformed_data, got_dns_message, connection_ready);
+    } else if(_traf_config->protocol == Protocol::DOT) {
+        _tcp_session = std::make_shared<TCPTLSSession>(_tcp_handle, malformed_data, got_dns_message, connection_ready, malformed_data);
+    } 
+#ifdef DOH_ENABLE
+	else {
+        _tcp_session = std::make_shared<HTTPSSession>(_tcp_handle, malformed_data, got_dns_message, connection_ready, malformed_data, current_target, _traf_config->method);
+    }
+#endif
     if (!_tcp_session->setup()) {
         return;
     }
@@ -212,9 +236,9 @@ void TrafGen::start_tcp_session()
 
     // fires ConnectEvent when connected
     if (_traf_config->family == AF_INET) {
-        _tcp_handle->connect<uvw::IPv4>(_traf_config->next_target_address(), _traf_config->port);
+        _tcp_handle->connect<uvw::IPv4>(current_target.address, _traf_config->port);
     } else {
-        _tcp_handle->connect<uvw::IPv6>(_traf_config->next_target_address(), _traf_config->port);
+        _tcp_handle->connect<uvw::IPv6>(current_target.address, _traf_config->port);
     }
 }
 
@@ -272,11 +296,11 @@ void TrafGen::udp_send()
         assert(_in_flight.find(id) == _in_flight.end());
         auto qt = _qgen->next_udp(id);
         if (_traf_config->family == AF_INET) {
-            _udp_handle->send<uvw::IPv4>(_traf_config->next_target_address(), _traf_config->port,
+            _udp_handle->send<uvw::IPv4>(_traf_config->next_target().address, _traf_config->port,
                 std::move(std::get<0>(qt)),
                 std::get<1>(qt));
         } else {
-            _udp_handle->send<uvw::IPv6>(_traf_config->next_target_address(), _traf_config->port,
+            _udp_handle->send<uvw::IPv6>(_traf_config->next_target().address, _traf_config->port,
                 std::move(std::get<0>(qt)),
                 std::get<1>(qt));
         }
@@ -292,11 +316,14 @@ void TrafGen::start()
         start_udp();
         _sender_timer = _loop->resource<uvw::TimerHandle>();
         _sender_timer->on<uvw::TimerEvent>([this](const uvw::TimerEvent &event, uvw::TimerHandle &h) {
-            if (_traf_config->protocol == Protocol::UDP) {
-                udp_send();
-            } else if (_traf_config->protocol == Protocol::TCP || _traf_config->protocol == Protocol::DOT) {
-                start_tcp_session();
-            }
+			switch(_traf_config->protocol) {
+				case Protocol::UDP: udp_send(); break;
+				case Protocol::TCP:
+#ifdef DOH_ENABLE
+				case Protocol::DOH:
+#endif
+				case Protocol::DOT: start_tcp_session(); break;
+			}
         });
         _sender_timer->start(uvw::TimerHandle::Time{1}, uvw::TimerHandle::Time{_traf_config->s_delay});
     } else {

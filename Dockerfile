@@ -1,6 +1,6 @@
 FROM ubuntu:20.04 AS build
 
-ENV BUILD_DEPS "g++ cmake make libldns-dev libuv1-dev libgnutls28-dev pkgconf"
+ENV BUILD_DEPS "g++ cmake make libldns-dev libnghttp2-dev libuv1-dev libgnutls28-dev pkgconf"
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN \
@@ -18,7 +18,7 @@ RUN \
 
 FROM ubuntu:20.04 AS runtime
 
-ENV RUNTIME_DEPS "libldns2 libuv1"
+ENV RUNTIME_DEPS "libldns2 libuv1 nghttp2"
 
 RUN \
     apt-get update && \
