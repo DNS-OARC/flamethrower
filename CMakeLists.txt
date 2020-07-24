@@ -15,7 +15,7 @@ if (NOT CMAKE_BUILD_TYPE)
 endif()
 # ::-------------------------------------------------------------------------::
 
-project(flamethrower VERSION 0.10.2)
+project(flamethrower VERSION 0.11.0)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
@@ -81,7 +81,7 @@ set(flamecore_src
 set(flamecore_dirs
     PUBLIC ${LIBUV_INCLUDE_DIRS}
     PUBLIC ${LIBLDNS_INCLUDE_DIRS}
-    PRIVATE ${LIBGNUTLS_INCLUDE_DIRS}
+    PUBLIC ${LIBGNUTLS_INCLUDE_DIRS}
     PUBLIC "${CMAKE_SOURCE_DIR}/3rd/docopt.cpp"
     PUBLIC "${CMAKE_SOURCE_DIR}/3rd/json"
     PUBLIC "${CMAKE_SOURCE_DIR}/3rd/url-parser"
@@ -113,7 +113,7 @@ if (DOH_ENABLE)
 
     set(flamecore_dirs
         ${flamecore_dirs}
-        PRIVATE ${LIBNGHTTP2_INCLUDE_DIRS}
+        PUBLIC ${LIBNGHTTP2_INCLUDE_DIRS}
         PUBLIC "${CMAKE_SOURCE_DIR}/3rd/base64url"
         )
 
