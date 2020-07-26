@@ -33,7 +33,7 @@ Target can be either an IP address or host name which will be resolved first.
 : IP address to bind to. Default is 0.0.0.0 for inet or ::0 for inet6.
 
 -q *QCOUNT*
-: Number of queries to send every *DELAY_MS* interval. Default is 10.
+: Number of queries to send every *DELAY_MS* interval. Default is 10. For DoH this specifies the number of concurrent HTTP/2 streams. If this number is larger than the maximum number of concurrent streams supported by the DoH server (100 for most), timeouts will happen.
 
 -c *TCOUNT*
 : Number of concurrent traffic generators per process. Default is 10.
