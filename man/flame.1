@@ -35,6 +35,9 @@ Default is 0.0.0.0 for inet or ::0 for inet6.
 .B -q \f[I]QCOUNT\f[R]
 Number of queries to send every \f[I]DELAY_MS\f[R] interval.
 Default is 10.
+For DoH this specifies the number of concurrent HTTP/2 streams.
+If this number is larger than the maximum number of concurrent streams
+supported by the DoH server (100 for most), timeouts will happen.
 .TP
 .B -c \f[I]TCOUNT\f[R]
 Number of concurrent traffic generators per process.
