@@ -12,7 +12,7 @@ COPY . /src
 RUN \
     mkdir /tmp/build && \
     cd /tmp/build && \
-    cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo /src && \
+    cmake -DDOH_ENABLE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo /src && \
     make all tests && \
     ./tests
 
