@@ -48,7 +48,9 @@ void TrafGen::process_wire(const char data[], size_t len)
     uint8_t rcode = data[3] & 0xf;
 
     if (_in_flight.find(id) == _in_flight.end()) {
-        std::cerr << "untracked " << id << std::endl;
+        if (_config->verbosity() > 1) {
+            std::cerr << "untracked " << id << std::endl;
+        }
         _metrics->bad_receive(_in_flight.size());
         return;
     }
