@@ -119,8 +119,9 @@ void TrafGen::start_tcp_session()
                 // out of ids, have to limit
                 break;
             }
-            if (_rate_limit && !_rate_limit->consume(1, this->_loop->now()))
+            if (_rate_limit && !_rate_limit->consume(1, this->_loop->now())) {
                 break;
+            }
             id = _free_id_list.back();
             _free_id_list.pop_back();
             assert(_in_flight.find(id) == _in_flight.end());
