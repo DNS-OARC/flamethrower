@@ -402,7 +402,7 @@ int main(int argc, char *argv[])
     for (auto i = 0; i < c_count; i++) {
         std::shared_ptr<TokenBucket> rl;
         if (config->rate_limit()) {
-            rl = std::make_shared<TokenBucket>(config->rate_limit() / c_count);
+            rl = std::make_shared<TokenBucket>((double)config->rate_limit() / (double)c_count);
         } else if (args["--qps-flow"]) {
             rl = std::make_shared<TokenBucket>();
             rl_list.push_back(rl);
@@ -494,7 +494,7 @@ int main(int argc, char *argv[])
             std::cout << "query list randomized" << std::endl;
         }
         if (config->rate_limit()) {
-            std::cout << "rate limit @ " << config->rate_limit() << " QPS (" << (config->rate_limit() / c_count) <<
+            std::cout << "rate limit @ " << config->rate_limit() << " QPS (" << ((double)config->rate_limit() / (double)c_count) <<
             " QPS per concurrent sender)" << std::endl;
         }
     }
