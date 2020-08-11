@@ -14,7 +14,7 @@ public:
     {
     }
 
-    TokenBucket(const double rate)
+    TokenBucket(double rate)
         : _rate_qps(rate)
         , _token_wallet(0)
         , _last_fill_ms(0)
@@ -28,7 +28,7 @@ public:
                 _last_fill_ms = now_ms;
             } else if (now_ms > _last_fill_ms) {
                 auto elapsed_ms = (now_ms - _last_fill_ms).count();
-                double add = _rate_qps * ((double)elapsed_ms / 1000.0);
+                double add = _rate_qps * elapsed_ms / 1000.0;
                 if (_token_wallet + add >= tokens) {
                     _token_wallet += add;
                     _last_fill_ms = now_ms;
