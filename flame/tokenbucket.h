@@ -14,7 +14,7 @@ public:
     {
     }
 
-    TokenBucket(const uint64_t rate)
+    TokenBucket(double rate)
         : _rate_qps(rate)
         , _token_wallet(0)
         , _last_fill_ms(0)
@@ -28,7 +28,7 @@ public:
                 _last_fill_ms = now_ms;
             } else if (now_ms > _last_fill_ms) {
                 auto elapsed_ms = (now_ms - _last_fill_ms).count();
-                double add = (double)_rate_qps * ((double)elapsed_ms / 1000.0);
+                double add = _rate_qps * elapsed_ms / 1000.0;
                 if (_token_wallet + add >= tokens) {
                     _token_wallet += add;
                     _last_fill_ms = now_ms;
@@ -43,8 +43,8 @@ public:
     }
 
 private:
-    uint64_t _rate_qps;
-    uint64_t _token_wallet;
+    double _rate_qps;
+    double _token_wallet;
     // milliseconds, based on uv_now() http://docs.libuv.org/en/v1.x/loop.html#c.uv_now
     uvw::Loop::Time _last_fill_ms;
 };
