@@ -6,11 +6,6 @@ A DNS performance and functional testing utility.
 
 2017-2020© NSONE, Inc.
 
-License
--------
-This code is released under Apache License 2.0. You can find terms and conditions in the LICENSE file.
-
-
 Overview
 --------
 
@@ -18,44 +13,17 @@ Flamethrower is a small, fast, configurable tool for functional testing, benchma
 
 Originally built as an alternative to dnsperf (https://github.com/DNS-OARC/dnsperf), many of the command line options are compatible.
 
-Dependencies
-------------
+Getting Started
+---------------
 
-* CMake >= 3.8
-* Linux or OSX
-* libuv >= 1.23.0
-* libldns >= 1.7.0
-* gnutls >= 3.3
-* C++ compiler supporting C++17
-
-DoH support requires:
-* nghttp2
-
-Build
------
-
-Default build:
+The easiest way to get started with Flamethrower is to use the public docker image:
 ```
-mkdir build; cd build
-cmake ..
-make
+docker pull ns1labs/flame
+docker run ns1labs/flame --help
 ```
 
-To build with DoH support:
-```
-mkdir build; cd build
-cmake -DDOH_ENABLE=ON ..
-make
-```
-
-Docker based, requires a recent version of docker.
-```
-org="myorg"
-image="myflame"
-tag="latest"
-docker build --network host -t ${org}/${image}:${tag} -f Dockerfile .
-docker run --rm -it --net host ${org}/${image}:${tag} --help
-```
+There are currently no prebuilt operating system packages. If you would like to build your own executable,
+please see the Build section below.
 
 Usage
 -----
@@ -133,6 +101,52 @@ Detailed Features
 
  There is currently no built-in support for multiprocess sending, so the maximum throughput will be reached once a single CPU is saturated. However, you may manually start several concurrent `flame` processes, including up to 1 per CPU available. There is future planned support for builtin multiprocess sending.
 
+Build Dependencies
+------------------
+
+* CMake >= 3.8
+* Linux or OSX
+* libuv >= 1.23.0
+* libldns >= 1.7.0
+* gnutls >= 3.3
+* C++ compiler supporting C++17
+
+Optional DoH support requires:
+* nghttp2
+
+Building
+--------
+
+Building is based on CMake.
+
+Default build:
+```
+mkdir build; cd build
+cmake ..
+make
+```
+
+To build with DoH support:
+```
+mkdir build; cd build
+cmake -DDOH_ENABLE=ON ..
+make
+```
+
+Building the docker image:
+```
+org="myorg"
+image="myflame"
+tag="latest"
+docker build --network host -t ${org}/${image}:${tag} -f Dockerfile .
+docker run --rm -it --net host ${org}/${image}:${tag} --help
+```
+
 Contributions
 ---
 Pull Requests and issues are welcome. See the [NS1 Contribution Guidelines](https://github.com/ns1/community) for more information.
+
+License
+-------
+This code is released under Apache License 2.0. You can find terms and conditions in the LICENSE file.
+

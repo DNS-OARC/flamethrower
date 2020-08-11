@@ -1,4 +1,4 @@
-FROM ubuntu:20.04 AS build
+FROM debian:buster-slim AS build
 
 ENV BUILD_DEPS "g++ cmake make libldns-dev libnghttp2-dev libuv1-dev libgnutls28-dev pkgconf"
 ENV DEBIAN_FRONTEND=noninteractive
@@ -16,7 +16,7 @@ RUN \
     make all tests && \
     ./tests
 
-FROM ubuntu:20.04 AS runtime
+FROM debian:buster-slim AS runtime
 
 ENV RUNTIME_DEPS "libldns2 libuv1 nghttp2"
 
