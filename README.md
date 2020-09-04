@@ -11,12 +11,12 @@ Overview
 
 Flamethrower is a small, fast, configurable tool for functional testing, benchmarking, and stress testing DNS servers and networks. It supports IPv4, IPv6, UDP, TCP, DoT, and DoH and has a modular system for generating queries used in the tests.
 
-Originally built as an alternative to dnsperf (https://github.com/DNS-OARC/dnsperf), many of the command line options are compatible.
+Originally built as an alternative to [dnsperf](https://github.com/DNS-OARC/dnsperf), many of the command line options are compatible.
 
 Getting Started
 ---------------
 
-The easiest way to get started with Flamethrower is to use the public docker image:
+The easiest way to get started with Flamethrower is to use the [public docker image](https://hub.docker.com/repository/docker/ns1labs/flame):
 ```
 docker pull ns1labs/flame
 docker run ns1labs/flame --help
