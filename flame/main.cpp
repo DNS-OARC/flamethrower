@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include <httplib.h>
+
 #include "config.h"
 #include "docopt.h"
 #include "http.h"
@@ -20,13 +22,14 @@
 
 #include "version.h"
 
+static const char METRIC_ROUTE[] = "/api/v1/metrics";
 static const char USAGE[] =
     R"(Flamethrower.
     Usage:
       flame [-b BIND_IP] [-q QCOUNT] [-c TCOUNT] [-p PORT] [-d DELAY_MS] [-r RECORD] [-T QTYPE]
             [-o FILE] [-l LIMIT_SECS] [-t TIMEOUT] [-F FAMILY] [-f FILE] [-n LOOP] [-P PROTOCOL] [-M HTTPMETHOD]
             [-Q QPS] [-g GENERATOR] [-v VERBOSITY] [-R] [--class CLASS] [--qps-flow SPEC]
-            [--dnssec] [--targets FILE]
+            [--dnssec] [--targets FILE] [--http-srv PORT]
             TARGET [GENOPTS]...
       flame (-h | --help)
       flame --version
@@ -59,6 +62,7 @@ static const char USAGE[] =
       -M HTTPMETHOD    HTTP method to use (POST/GET) when DoH is used [default: GET]
       -g GENERATOR     Generate queries with the given generator [default: static]
       -o FILE          Metrics output file, JSON format
+      --http-srv PORT  Expose JSON metrics via HTTP on the specified port
       -v VERBOSITY     How verbose output should be, 0 is silent [default: 1]
       -R               Randomize the query list before sending [default: false]
       --targets FILE   Get the list of TARGETs from the given file, one line per host or IP
@@ -162,6 +166,22 @@ bool arg_exists(const char *needle, int argc, char *argv[])
         }
     }
     return false;
+}
+
+void setupRoutes(const MetricsMgr* metricsManager, httplib::Server &svr)
+{
+
+    svr.Get(METRIC_ROUTE, [metricsManager](const httplib::Request &req, httplib::Response &res) {
+        std::string out;
+        try {
+            out = metricsManager->toJSON();
+            res.set_content(out, "text/json");
+        } catch (const std::exception &e) {
+            res.status = 500;
+            res.set_content(e.what(), "text/plain");
+        }
+    });
+
 }
 
 int main(int argc, char *argv[])
@@ -378,6 +398,20 @@ int main(int argc, char *argv[])
         }
     }
     auto metrics_mgr = std::make_shared<MetricsMgr>(loop, config, cmdline);
+    httplib::Server svr;
+    bool haveMetricServer(args["--http-srv"]);
+    std::unique_ptr<std::thread> httpThread;
+
+    if (haveMetricServer) {
+        setupRoutes(metrics_mgr.get(), svr);
+        auto port = args["--http-srv"].asLong();
+        httpThread = std::make_unique<std::thread>([&svr, port] {
+            std::cerr << "Metrics web server listening on http://localhost" << ":" << port << METRIC_ROUTE << std::endl;
+            if (!svr.listen("localhost", port)) {
+                throw std::runtime_error("unable to listen");
+            }
+        });
+    }
 
     std::queue<std::pair<uint64_t, uint64_t>> qps_flow;
     std::vector<std::shared_ptr<TokenBucket>> rl_list;
@@ -470,7 +504,7 @@ int main(int argc, char *argv[])
     sigterm->start(SIGTERM);
 
     if (config->verbosity()) {
-        std::cout << "binding to " << traf_config->bind_ip << std::endl;
+        std::cout << "binding traffic generators to " << traf_config->bind_ip << std::endl;
         std::cout << "flaming target(s) [";
         for (uint i = 0; i < 3; i++) {
             std::cout << traf_config->target_list[i].address;
@@ -504,6 +538,11 @@ int main(int argc, char *argv[])
 
     // break from loop with ^C or timer
     loop = nullptr;
+
+    if (haveMetricServer) {
+        svr.stop();
+        httpThread->join();
+    }
 
     // when loop is complete, finalize metrics
     metrics_mgr->finalize();

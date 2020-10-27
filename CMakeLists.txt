@@ -86,6 +86,7 @@ set(flamecore_dirs
     PUBLIC "${CMAKE_SOURCE_DIR}/3rd/json"
     PUBLIC "${CMAKE_SOURCE_DIR}/3rd/url-parser"
     PUBLIC "${CMAKE_SOURCE_DIR}/3rd/uvw"
+    PUBLIC "${CMAKE_SOURCE_DIR}/3rd/cpp-httplib"
     )
 
 set(flamecore_libs
