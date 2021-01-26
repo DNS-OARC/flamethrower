@@ -86,6 +86,7 @@ class TrafGen
     void start_udp();
     void udp_send();
 
+    void connect_tcp_events();
     void start_tcp_session();
     void start_wait_timer_for_tcp_finish();
 
