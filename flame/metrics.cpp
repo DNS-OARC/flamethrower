@@ -268,7 +268,11 @@ void MetricsMgr::aggregate_trafgen(const Metrics *m)
     _agg_total_timeouts += m->_period_timeouts;
 
     _agg_period_bad_count += m->_period_bad_count;
+    _agg_total_bad_count += m->_period_bad_count;
+
     _agg_period_net_errors += m->_period_net_errors;
+    _agg_total_net_errors += m->_period_net_errors;
+
     _agg_period_tcp_connections += m->_period_tcp_connections;
     _agg_total_tcp_connections += m->_period_tcp_connections;
 
