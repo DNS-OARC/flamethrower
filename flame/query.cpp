@@ -4,6 +4,7 @@
 #include "utils.h"
 #include <algorithm>
 #include <cctype>
+#include <climits>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -17,7 +18,9 @@
 #include <ldns/host2wire.h>
 #include <ldns/wire2host.h>
 
+#include <arpa/inet.h>
 #include <netinet/in.h>
+#include <sys/socket.h>
 
 // EDNS buffer size to avoid fragmentation on IPv6
 static constexpr uint16_t EDNS_BUFFER_SIZE = 1232;
@@ -138,6 +141,23 @@ void QueryGenerator::set_args(const std::vector<std::string> &args)
     }
 }
 
+#ifdef DOH_ENABLE
+QueryGenerator::QueryTpt QueryGenerator::next_base64url(uint16_t id)
+{
+    WireTpt w = _wire_buffers[_reqs++ % _wire_buffers.size()];
+    size_t len{w.second};
+    auto buf = std::make_unique<char[]>(len);
+    memcpy(buf.get(), w.first, w.second);
+    uint16_t _id = ntohs(id);
+    memcpy(buf.get(), &_id, sizeof(_id));
+    std::string encoded = base64_encode((unsigned char*) buf.get(), len);
+    size_t encoded_len = encoded.size();
+    auto encoded_buf = std::make_unique<char []>(encoded_len);
+    memcpy(encoded_buf.get(), encoded.c_str(), encoded_len);
+    return std::make_tuple(std::move(encoded_buf), encoded_len);
+}
+#endif
+
 QueryGenerator::QueryTpt QueryGenerator::next_tcp(const std::vector<uint16_t> &id_list)
 {
 
@@ -229,7 +249,7 @@ static ldns_pkt *new_query(const char *name, size_t name_len, bool name_bin,
 }
 
 void QueryGenerator::new_rec(uint8_t **dest, size_t *dest_len, const char *qname, size_t len,
-    const std::string &qtype, bool binary, uint16_t id)
+    const std::string &qtype, const std::string &prefix, bool binary, uint16_t id)
 {
 
     ldns_enum_rr_class qclass;
@@ -265,6 +285,46 @@ void QueryGenerator::new_rec(uint8_t **dest, size_t *dest_len, const char *qname
     ldns_pkt_set_edns_udp_size(query, EDNS_BUFFER_SIZE);
     ldns_pkt_set_edns_do(query, _dnssec);
 
+    auto prefix_split = split(prefix, '/');
+    if (prefix_split.size() == 2) {
+        auto cidr = prefix_split[0];
+        uint8_t mask = std::stoi(prefix_split[1]);
+
+        bool ipv6 = false;
+        struct sockaddr_in sa;
+        struct sockaddr_in6 sa6;
+        if (cidr.find(':') != std::string::npos) {
+            ipv6 = true;
+            inet_pton(AF_INET6, cidr.c_str(), &(sa6.sin6_addr));
+        } else {
+            inet_pton(AF_INET, cidr.c_str(), &(sa.sin_addr));
+        }
+
+        int numbytes = (mask + (CHAR_BIT - 1)) / CHAR_BIT;
+        uint16_t optionlen = 4 + numbytes;
+
+        // https://tools.ietf.org/html/rfc7871;
+        int idx = 0;
+        int buflen = optionlen + 4; // add 2 bytes each for option code/optionlen fields
+        uint8_t *buf = (uint8_t *)malloc(buflen);
+        buf[idx++] = 0x00; // option-code msb
+        buf[idx++] = 0x08; // option-code lsb
+        buf[idx++] = optionlen >> 16; //option-len msb
+        buf[idx++] = optionlen & 0xFF; // option-len lsb
+        buf[idx++] = 0x00; // family msb
+        buf[idx++] = ipv6 ? 0x02 : 0x01; // family lsb
+        buf[idx++] = mask; // source preflen
+        buf[idx++] = 0x00; // scope preflen
+        if (ipv6) {
+            std::memcpy(&buf[idx], &sa6.sin6_addr, numbytes); // address
+        } else {
+            std::memcpy(&buf[idx], &sa.sin_addr, numbytes); // address
+        }
+
+        ldns_rdf *edns_data = ldns_rdf_new(LDNS_RDF_TYPE_UNKNOWN, buflen, buf);
+        ldns_pkt_set_edns_data(query, edns_data);
+    }
+
     ldns_pkt2wire(dest, query, dest_len);
     ldns_pkt_free(query);
 }
@@ -273,7 +333,14 @@ void QueryGenerator::push_rec(const char *qname, size_t len, const std::string &
 {
 
     WireTpt w;
-    new_rec(&w.first, &w.second, qname, len, qtype, binary);
+    new_rec(&w.first, &w.second, qname, len, qtype, "", binary, 0);
+    _wire_buffers.push_back(w);
+}
+
+void QueryGenerator::push_rec(const std::string &qname, const std::string &qtype, const std::string &prefix, bool binary)
+{
+    WireTpt w;
+    new_rec(&w.first, &w.second, qname.c_str(), qname.length(), qtype, prefix, binary, 0);
     _wire_buffers.push_back(w);
 }
 
@@ -293,7 +360,7 @@ FileQueryGenerator::FileQueryGenerator(std::shared_ptr<Config> c,
 {
     std::ifstream file;
     std::string line;
-    std::regex splitter("^[[:space:]]*([^[:space:]]+)[[:space:]]+([^[:space:]]+)[[:space:]]*$");
+    std::regex splitter("^[[:space:]]*([^[:space:]]+)[[:space:]]+([^[:space:]]+)[[:space:]]*([^[:space:]]+)?[[:space:]]*$");
 
     file.open(fname);
     if (!file.is_open()) {
@@ -306,6 +373,8 @@ FileQueryGenerator::FileQueryGenerator(std::shared_ptr<Config> c,
         std::regex_match(line, result, splitter);
         if (result.size() == 3) {
             push_rec(std::move(result[1].str()), result[2].str(), false);
+        } else if (result.size() == 4) {
+            push_rec(std::move(result[1].str()), result[2].str(), result[3].str(), false);
         }
     }
 
@@ -576,7 +645,7 @@ QueryGenerator::QueryTpt NumberNameQueryGenerator::next_udp(uint16_t id)
     n = _namedist(_generator);
     qname << n << '.' << _qname;
 
-    new_rec(&buf, &buf_len, qname.str().c_str(), qname.str().length(), _qtype, false, id);
+    new_rec(&buf, &buf_len, qname.str().c_str(), qname.str().length(), _qtype, "", false, id);
 
     auto ret_buf = std::make_unique<char[]>(buf_len);
     memcpy(ret_buf.get(), buf, buf_len);

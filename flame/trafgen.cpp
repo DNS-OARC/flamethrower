@@ -54,7 +54,9 @@ void TrafGen::process_wire(const char data[], size_t len)
     uint8_t rcode = data[3] & 0xf;
 
     if (_in_flight.find(id) == _in_flight.end()) {
-        std::cerr << "untracked " << id << std::endl;
+        if (_config->verbosity() > 1) {
+            std::cerr << "untracked " << id << std::endl;
+        }
         _metrics->bad_receive(_in_flight.size());
         return;
     }
@@ -71,13 +73,15 @@ void TrafGen::start_udp()
     _udp_handle = _loop->resource<uvw::UDPHandle>(_traf_config->family);
 
     _udp_handle->on<uvw::ErrorEvent>([this](const uvw::ErrorEvent &e, uvw::UDPHandle &) {
+        if (0 == strcmp(e.name(), "EADDRNOTAVAIL"))
+            throw std::runtime_error("unable to bind to ip address: " + _traf_config->bind_ip);
         _metrics->net_error();
     });
 
     if (_traf_config->family == AF_INET) {
-        _udp_handle->bind<uvw::IPv4>("0.0.0.0", 0);
+        _udp_handle->bind<uvw::IPv4>(_traf_config->bind_ip, 0);
     } else {
-        _udp_handle->bind<uvw::IPv6>("::0", 0, uvw::UDPHandle::Bind::IPV6ONLY);
+        _udp_handle->bind<uvw::IPv6>(_traf_config->bind_ip, 0, uvw::UDPHandle::Bind::IPV6ONLY);
     }
 
     _metrics->trafgen_id(_udp_handle->sock().port);
@@ -95,12 +99,13 @@ void TrafGen::start_tcp_session()
     assert(_tcp_handle.get() == 0);
     assert(_tcp_session.get() == 0);
     assert(_finish_session_timer.get() == 0);
+    Target current_target = _traf_config->next_target();
     _tcp_handle = _loop->resource<uvw::TcpHandle>(_traf_config->family);
 
     if (_traf_config->family == AF_INET) {
-        _tcp_handle->bind<uvw::IPv4>("0.0.0.0", 0);
+        _tcp_handle->bind<uvw::IPv4>(_traf_config->bind_ip, 0);
     } else {
-        _tcp_handle->bind<uvw::IPv6>("::0", 0, uvw::TcpHandle::Bind::IPV6ONLY);
+        _tcp_handle->bind<uvw::IPv6>(_traf_config->bind_ip, 0, uvw::TcpHandle::Bind::IPV6ONLY);
     }
 
     _metrics->trafgen_id(_tcp_handle->sock().port);
@@ -123,7 +128,7 @@ void TrafGen::start_tcp_session()
                 // out of ids, have to limit
                 break;
             }
-            if (_rate_limit && !_rate_limit->consume(1))
+            if (_rate_limit && !_rate_limit->consume(1, this->_loop->now()))
                 break;
             id = _free_id_list.back();
             _free_id_list.pop_back();
@@ -132,6 +137,17 @@ void TrafGen::start_tcp_session()
             // might be better to do this after write (in WriteEvent) but it needs to be available
             // by the time DataEvent fires, and we don't want a race there
             _in_flight[id].send_time = std::chrono::high_resolution_clock::now();
+
+#ifdef DOH_ENABLE
+            // Send one by one with DoH
+            if(_traf_config->protocol == Protocol::DOH) {
+                auto qt = (_traf_config->method == HTTPMethod::GET)
+                    ? _qgen->next_base64url(id_list[i])
+                    : _qgen->next_udp(id_list[i]);
+                _tcp_session->write(std::move(std::get<0>(qt)), std::get<1>(qt));
+                _metrics->send(std::get<1>(qt), 1, _in_flight.size());
+            }
+#endif
         }
 
         if (id_list.size() == 0) {
@@ -140,19 +156,31 @@ void TrafGen::start_tcp_session()
             return;
         }
 
-        auto qt = _qgen->next_tcp(id_list);
+#ifdef DOH_ENABLE
+        if(_traf_config->protocol != Protocol::DOH) {
+#endif
+            auto qt = _qgen->next_tcp(id_list);
 
-        // async send the batch. fires WriteEvent when finished sending.
-        _tcp_session->write(std::move(std::get<0>(qt)), std::get<1>(qt));
+            // async send the batch. fires WriteEvent when finished sending.
+            _tcp_session->write(std::move(std::get<0>(qt)), std::get<1>(qt));
 
-        _metrics->send(std::get<1>(qt), id_list.size(), _in_flight.size());
+            _metrics->send(std::get<1>(qt), id_list.size(), _in_flight.size());
+#ifdef DOH_ENABLE
+        }
+#endif
     };
 
     // For now, treat a TLS handshake failure as malformed data
-    _tcp_session = (_traf_config->protocol == Protocol::TCPTLS)
-        ? std::make_shared<TCPTLSSession>(_tcp_handle, malformed_data, got_dns_message, connection_ready, malformed_data)
-        : std::make_shared<TCPSession>(_tcp_handle, malformed_data, got_dns_message, connection_ready);
-
+    if(_traf_config->protocol == Protocol::TCP) {
+        _tcp_session = std::make_shared<TCPSession>(_tcp_handle, malformed_data, got_dns_message, connection_ready);
+    } else if(_traf_config->protocol == Protocol::DOT) {
+        _tcp_session = std::make_shared<TCPTLSSession>(_tcp_handle, malformed_data, got_dns_message, connection_ready, malformed_data);
+    } 
+#ifdef DOH_ENABLE
+	else {
+        _tcp_session = std::make_shared<HTTPSSession>(_tcp_handle, malformed_data, got_dns_message, connection_ready, malformed_data, current_target, _traf_config->method);
+    }
+#endif
     if (!_tcp_session->setup()) {
         return;
     }
@@ -216,9 +244,9 @@ void TrafGen::start_tcp_session()
 
     // fires ConnectEvent when connected
     if (_traf_config->family == AF_INET) {
-        _tcp_handle->connect<uvw::IPv4>(_traf_config->next_target_address(), _traf_config->port);
+        _tcp_handle->connect<uvw::IPv4>(current_target.address, _traf_config->port);
     } else {
-        _tcp_handle->connect<uvw::IPv6>(_traf_config->next_target_address(), _traf_config->port);
+        _tcp_handle->connect<uvw::IPv6>(current_target.address, _traf_config->port);
     }
 }
 
@@ -308,9 +336,9 @@ void TrafGen::quic_send()
                     throw std::runtime_error("unable to allocate datagram memory");
                 }
                 if (_traf_config->family == AF_INET) {
-                    _udp_handle->send<uvw::IPv4>(_traf_config->next_target_address(), _traf_config->port, data, dgrams[i]->data.len);
+                    _udp_handle->send<uvw::IPv4>(_traf_config->next_target().address, _traf_config->port, data, dgrams[i]->data.len);
                 } else {
-                    _udp_handle->send<uvw::IPv6>(_traf_config->next_target_address(), _traf_config->port, data, dgrams[i]->data.len);
+                    _udp_handle->send<uvw::IPv6>(_traf_config->next_target().address, _traf_config->port, data, dgrams[i]->data.len);
                 }
                 q_ctx.packet_allocator->free_packet(q_ctx.packet_allocator, dgrams[i]);
             }
@@ -341,7 +369,7 @@ void TrafGen::udp_send()
     }
     uint16_t id{0};
     for (int i = 0; i < _traf_config->batch_count; i++) {
-        if (_rate_limit && !_rate_limit->consume(1))
+        if (_rate_limit && !_rate_limit->consume(1, _loop->now()))
             return;
         if (_free_id_list.size() == 0) {
             std::cerr << "max in flight reached" << std::endl;
@@ -352,11 +380,11 @@ void TrafGen::udp_send()
         assert(_in_flight.find(id) == _in_flight.end());
         auto qt = _qgen->next_udp(id);
         if (_traf_config->family == AF_INET) {
-            _udp_handle->send<uvw::IPv4>(_traf_config->next_target_address(), _traf_config->port,
+            _udp_handle->send<uvw::IPv4>(_traf_config->next_target().address, _traf_config->port,
                 std::move(std::get<0>(qt)),
                 std::get<1>(qt));
         } else {
-            _udp_handle->send<uvw::IPv6>(_traf_config->next_target_address(), _traf_config->port,
+            _udp_handle->send<uvw::IPv6>(_traf_config->next_target().address, _traf_config->port,
                 std::move(std::get<0>(qt)),
                 std::get<1>(qt));
         }
@@ -449,7 +477,7 @@ void TrafGen::start_quic()
     _metrics->trafgen_id(_udp_handle->sock().port);
 
     int ret;
-    auto addr = _traf_config->next_target_address();
+    auto addr = _traf_config->next_target().address;
     struct sockaddr_storage sa;
     sockaddr* sa_ptr = (sockaddr*)&sa;
     sa.ss_family = _traf_config->family;

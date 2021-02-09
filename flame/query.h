@@ -11,6 +11,10 @@
 #include <tuple>
 #include <vector>
 
+#ifdef DOH_ENABLE
+#include "base64.h"
+#endif
+
 #include "config.h"
 #include <ldns/rr.h>
 
@@ -48,8 +52,9 @@ protected:
     ldns_rr_type cvt_qtype(const std::string &t);
 
     void new_rec(uint8_t **dest, size_t *dest_len, const char *qname, size_t len,
-        const std::string &qtype, bool binary, uint16_t id = 0);
+        const std::string &qtype, const std::string &prefix, bool binary, uint16_t id);
     void push_rec(const char *qname, size_t len, const std::string &qtype, bool binary);
+    void push_rec(const std::string &qname, const std::string &qtype, const std::string &prefix, bool binary);
     void push_rec(const std::string &qname, const std::string &qtype, bool binary);
 
 public:
@@ -63,11 +68,16 @@ public:
 
     virtual void init() = 0;
 
+#ifdef DOH_ENABLE
+    virtual QueryTpt next_base64url(uint16_t);
+#endif
     virtual QueryTpt next_udp(uint16_t);
     virtual QueryTpt next_tcp(const std::vector<uint16_t> &);
     bool finished();
 
     virtual const char *name() = 0;
+
+    virtual bool synthesizedQueries() = 0;
 
     void set_args(const std::vector<std::string> &args);
 
@@ -142,6 +152,11 @@ public:
     {
         return "static";
     }
+
+    bool synthesizedQueries()
+    {
+        return false;
+    }
 };
 
 class FileQueryGenerator : public QueryGenerator
@@ -159,6 +174,10 @@ public:
     {
         return "file";
     }
+    bool synthesizedQueries()
+    {
+        return false;
+    }
 };
 
 class RandomPktQueryGenerator : public QueryGenerator
@@ -173,6 +192,10 @@ public:
     const char *name()
     {
         return "randompkt";
+    }
+    bool synthesizedQueries()
+    {
+        return false;
     }
 };
 
@@ -189,6 +212,10 @@ public:
     {
         return "randomqname";
     }
+    bool synthesizedQueries()
+    {
+        return false;
+    }
 };
 
 class RandomLabelQueryGenerator : public QueryGenerator
@@ -203,6 +230,10 @@ public:
     const char *name()
     {
         return "randomlabel";
+    }
+    bool synthesizedQueries()
+    {
+        return false;
     }
 };
 
@@ -220,11 +251,16 @@ public:
 
     void init();
 
+    //QueryTpt next_base64url(uint16_t);
     QueryTpt next_udp(uint16_t);
     QueryTpt next_tcp(const std::vector<uint16_t> &);
 
     const char *name()
     {
         return "numberqname";
+    }
+    bool synthesizedQueries()
+    {
+        return true;
     }
 };

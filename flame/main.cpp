@@ -10,6 +10,7 @@
 
 #include "config.h"
 #include "docopt.h"
+#include "http.h"
 #include "metrics.h"
 #include "query.h"
 #include "trafgen.h"
@@ -17,12 +18,16 @@
 
 #include <uvw.hpp>
 
-#include "flame.h"
+#include "version.h"
 
 static const char USAGE[] =
     R"(Flamethrower.
     Usage:
-      flame [options] TARGET [GENOPTS]...
+      flame [-b BIND_IP] [-q QCOUNT] [-c TCOUNT] [-p PORT] [-d DELAY_MS] [-r RECORD] [-T QTYPE]
+            [-o FILE] [-l LIMIT_SECS] [-t TIMEOUT] [-F FAMILY] [-f FILE] [-n LOOP] [-P PROTOCOL] [-M HTTPMETHOD]
+            [-Q QPS] [-g GENERATOR] [-v VERBOSITY] [-R] [--class CLASS] [--qps-flow SPEC]
+            [--dnssec] [--targets FILE]
+            TARGET [GENOPTS]...
       flame (-h | --help)
       flame --version
 
@@ -36,6 +41,7 @@ static const char USAGE[] =
       -h --help        Show this screen
       --version        Show version
       --class CLASS    Default query class, defaults to IN. May also be CH [default: IN]
+      -b BIND_IP       IP address to bind to [defaults: 0.0.0.0 for inet, ::0 for inet6]
       -c TCOUNT        Number of concurrent traffic generators per process [default: 10]
       -d DELAY_MS      ms delay between each traffic generator's query [default: 1]
       -q QCOUNT        Number of queries to send every DELAY ms [default: 10]
@@ -47,9 +53,10 @@ static const char USAGE[] =
       -r RECORD        The base record to use as the DNS query for generators [default: test.com]
       -T QTYPE         The query type to use for generators [default: A]
       -f FILE          Read records from FILE, one per row, QNAME TYPE
-      -p PORT          Which port to flame [defaults: 53, 853 for tcptls, 784 for quic]
+      -p PORT          Which port to flame [defaults: 53, 443 for DoH, 853 for DoT, 784 for DoQ]
       -F FAMILY        Internet family (inet/inet6) [default: inet]
-      -P PROTOCOL      Protocol to use (udp/tcp/tcptls/quic) [default: udp]
+      -P PROTOCOL      Protocol to use (udp/tcp/dot/doh) [default: udp]
+      -M HTTPMETHOD    HTTP method to use (POST/GET) when DoH is used [default: GET]
       -g GENERATOR     Generate queries with the given generator [default: static]
       -o FILE          Metrics output file, JSON format
       -v VERBOSITY     How verbose output should be, 0 is silent [default: 1]
@@ -100,7 +107,7 @@ static const char USAGE[] =
 
 )";
 
-void parse_flowspec(std::string spec, std::queue<std::pair<uint64_t, uint64_t>> &result, int verbosity)
+void parse_flowspec(std::string spec, std::queue<std::pair<uint64_t, uint64_t>> &result, int verbosity, long c_count)
 {
 
     std::vector<std::string> groups = split(spec, ';');
@@ -109,13 +116,19 @@ void parse_flowspec(std::string spec, std::queue<std::pair<uint64_t, uint64_t>> 
         if (verbosity > 1) {
             std::cout << "adding QPS flow: " << nums[0] << "qps, " << nums[1] << "ms" << std::endl;
         }
-        result.push(std::make_pair(std::stol(nums[0]), std::stol(nums[1])));
+        long want_r = std::stol(nums[0]);
+        if (want_r < c_count) {
+            std::cerr << "WARNING: QPS flow limit is less than concurrent senders, changing limit to " << c_count << std::endl;
+            want_r = c_count;
+        }
+        result.push(std::make_pair(want_r, std::stol(nums[1])));
     }
 }
 
 void flow_change(std::queue<std::pair<uint64_t, uint64_t>> qps_flow,
-    std::shared_ptr<TokenBucket> rl,
-    int verbosity)
+    std::vector<std::shared_ptr<TokenBucket>> rl_list,
+    int verbosity,
+    long c_count)
 {
     auto flow = qps_flow.front();
     qps_flow.pop();
@@ -127,14 +140,16 @@ void flow_change(std::queue<std::pair<uint64_t, uint64_t>> qps_flow,
             std::cout << "QPS flow now " << flow.first << " until completion" << std::endl;
         }
     }
-    *rl = TokenBucket(flow.first, flow.first);
+    for (auto &rl : rl_list) {
+        *rl = TokenBucket(flow.first / c_count);
+    }
     if (qps_flow.size() == 0)
         return;
     auto loop = uvw::Loop::getDefault();
     auto qps_timer = loop->resource<uvw::TimerHandle>();
-    qps_timer->on<uvw::TimerEvent>([qps_flow, rl, verbosity](const auto &event, auto &handle) {
+    qps_timer->on<uvw::TimerEvent>([qps_flow, rl_list, verbosity, c_count](const auto& event, auto& handle) {
         handle.stop();
-        flow_change(qps_flow, rl, verbosity);
+        flow_change(qps_flow, rl_list, verbosity, c_count);
     });
     qps_timer->start(uvw::TimerHandle::Time{flow.second}, uvw::TimerHandle::Time{0});
 }
@@ -181,8 +196,20 @@ int main(int argc, char *argv[])
     long c_count = args["-c"].asLong();
 
     Protocol proto{Protocol::UDP};
-    if (args["-P"].asString() == "tcp" || args["-P"].asString() == "tcptls") {
-        proto = (args["-P"].asString() == "tcptls") ? Protocol::TCPTLS : Protocol::TCP;
+    // note: tcptls is available as a deprecated alternative to dot
+    if (args["-P"].asString() == "tcp" || args["-P"].asString() == "dot" || args["-P"].asString() == "tcptls" || args["-P"].asString() == "doh") {
+        if (args["-P"].asString() == "dot" || args["-P"].asString() == "tcptls") {
+            proto = Protocol::DOT;
+        } else if (args["-P"].asString() == "doh") {
+#ifdef DOH_ENABLE
+            proto = Protocol::DOH;
+#else
+			std::cerr << "DNS over HTTPS (DoH) support is not enabled" << std::endl;
+			return 1;
+#endif
+        } else {
+            proto = Protocol::TCP;
+        }
         if (!arg_exists("-d", argc, argv))
             s_delay = 1000;
         if (!arg_exists("-q", argc, argv))
@@ -198,7 +225,7 @@ int main(int argc, char *argv[])
     }
 #endif
     else {
-        std::cerr << "protocol must be 'udp', 'tcp', 'tcptls'";
+        std::cerr << "protocol must be 'udp', 'tcp', 'dot', 'doh'";
 #ifdef QUIC_ENABLE
         std::cerr << ", 'quic'";
 #else
@@ -209,18 +236,26 @@ int main(int argc, char *argv[])
     }
 
     if (!args["-p"]) {
-        if (proto == Protocol::TCPTLS) {
+        if (proto == Protocol::DOT)
             args["-p"] = std::string("853");
-        }
-#ifdef QUIC_ENABLE
-        else if (proto == Protocol::QUIC) {
-            args["-p"] = std::string("784");
-        }
+#ifdef DOH_ENABLE
+        else if (proto == Protocol::DOH)
+            args["-p"] = std::string("443");
 #endif
-        else {
+#ifdef QUIC_ENABLE
+        else if (proto == Protocol::QUIC)
+            args["-p"] = std::string("784");
+#endif
+        else 
             args["-p"] = std::string("53");
-        }
     }
+
+#ifdef DOH_ENABLE
+    HTTPMethod method{HTTPMethod::GET};
+    if(args["-M"].asString() == "POST") {
+        method = HTTPMethod::POST;
+    }
+#endif
 
     auto runtime_limit = args["-l"].asLong();
 
@@ -232,6 +267,20 @@ int main(int argc, char *argv[])
         family = AF_INET6;
     } else {
         std::cerr << "internet family must be 'inet' or 'inet6'" << std::endl;
+        return 1;
+    }
+
+    if (!args["-b"]) {
+        if (family == AF_INET)
+            args["-b"] = std::string("0.0.0.0");
+        else
+            args["-b"] = std::string("::0");
+    }
+    auto bind_ip = args["-b"].asString();
+    auto bind_ip_request = loop->resource<uvw::GetAddrInfoReq>();
+    auto bind_ip_resolved = bind_ip_request->addrInfoSync(bind_ip, "0");
+    if (!bind_ip_resolved.first) {
+        std::cerr << "unable to resolve bind ip address: " << bind_ip << std::endl;
         return 1;
     }
 
@@ -252,13 +301,25 @@ int main(int argc, char *argv[])
         raw_target_list = split(args["TARGET"].asString(), ',');
     }
 
-    std::vector<std::string> target_list;
+    std::vector<Target> target_list;
     auto request = loop->resource<uvw::GetAddrInfoReq>();
     for (uint i = 0; i < raw_target_list.size(); i++) {
         uvw::Addr addr;
-        auto target_resolved = request->addrInfoSync(raw_target_list[i], args["-p"].asString());
+        struct http_parser_url parsed = {};
+        std::string url = raw_target_list[i];
+        if(url.rfind("https://", 0) != 0) {
+            url.insert(0, "https://");
+        }
+        int ret = http_parser_parse_url(url.c_str(), strlen(url.c_str()), 0, &parsed);
+        if(ret != 0) {
+            std::cerr << "could not parse url: " << url << std::endl;
+            return 1;
+        }
+        std::string authority(&url[parsed.field_data[UF_HOST].off], parsed.field_data[UF_HOST].len);
+
+        auto target_resolved = request->addrInfoSync(authority, args["-p"].asString());
         if (!target_resolved.first) {
-            std::cerr << "unable to resolve target address: " << raw_target_list[i] << std::endl;
+            std::cerr << "unable to resolve target address: " << authority << std::endl;
             if (raw_target_list[i] == "file") {
                 std::cerr << "(did you mean to include --targets?)" << std::endl;
             }
@@ -278,13 +339,18 @@ int main(int argc, char *argv[])
         } else if (family == AF_INET6) {
             addr = uvw::details::address<uvw::IPv6>((struct sockaddr_in6 *)node->ai_addr);
         }
-        target_list.push_back(addr.ip);
+        target_list.push_back({&parsed, addr.ip, url});
     }
 
+    long want_r_limit = args["-Q"].asLong();
+    if (want_r_limit && want_r_limit < c_count) {
+        std::cerr << "WARNING: QPS limit is less than concurrent senders, changing limit to " << c_count << std::endl;
+        want_r_limit = c_count;
+    }
     auto config = std::make_shared<Config>(
         args["-v"].asLong(),
         output_file,
-        args["-Q"].asLong());
+        want_r_limit);
 
     std::shared_ptr<QueryGenerator> qgen;
     try {
@@ -308,6 +374,9 @@ int main(int argc, char *argv[])
         qgen->set_qname(args["-r"].asString());
         qgen->set_qtype(args["-T"].asString());
         qgen->init();
+        if (!qgen->synthesizedQueries() && qgen->size() == 0) {
+            throw std::runtime_error("no queries were generated");
+        }
     } catch (const std::exception &e) {
         std::cerr << "generator error: " << e.what() << std::endl;
         return 1;
@@ -327,26 +396,33 @@ int main(int argc, char *argv[])
     auto metrics_mgr = std::make_shared<MetricsMgr>(loop, config, cmdline);
 
     std::queue<std::pair<uint64_t, uint64_t>> qps_flow;
-    std::shared_ptr<TokenBucket> rl;
-    if (config->rate_limit()) {
-        rl = std::make_shared<TokenBucket>(config->rate_limit(), config->rate_limit());
-    } else if (args["--qps-flow"]) {
-        rl = std::make_shared<TokenBucket>();
-        parse_flowspec(args["--qps-flow"].asString(), qps_flow, config->verbosity());
-        flow_change(qps_flow, rl, config->verbosity());
+    std::vector<std::shared_ptr<TokenBucket>> rl_list;
+    if (args["--qps-flow"]) {
+        parse_flowspec(args["--qps-flow"].asString(), qps_flow, config->verbosity(), c_count);
     }
 
     auto traf_config = std::make_shared<TrafGenConfig>();
     traf_config->batch_count = b_count;
     traf_config->family = family;
-    traf_config->target_address = target_list;
+    traf_config->bind_ip = bind_ip;
+    traf_config->target_list = target_list;
     traf_config->port = static_cast<unsigned int>(args["-p"].asLong());
     traf_config->s_delay = s_delay;
     traf_config->protocol = proto;
+#ifdef DOH_ENABLE
+    traf_config->method = method;
+#endif
     traf_config->r_timeout = args["-t"].asLong();
 
     std::vector<std::shared_ptr<TrafGen>> throwers;
     for (auto i = 0; i < c_count; i++) {
+        std::shared_ptr<TokenBucket> rl;
+        if (config->rate_limit()) {
+            rl = std::make_shared<TokenBucket>(config->rate_limit() / static_cast<double>(c_count));
+        } else if (args["--qps-flow"]) {
+            rl = std::make_shared<TokenBucket>();
+            rl_list.push_back(rl);
+        }
         throwers.push_back(std::make_shared<TrafGen>(loop,
             metrics_mgr->create_trafgen_metrics(),
             config,
@@ -354,6 +430,9 @@ int main(int argc, char *argv[])
             qgen,
             rl));
         throwers[i]->start();
+    }
+    if (args["--qps-flow"]) {
+        flow_change(qps_flow, rl_list, config->verbosity(), c_count);
     }
 
     auto have_in_flight = [&throwers]() {
@@ -407,18 +486,19 @@ int main(int argc, char *argv[])
     sigterm->start(SIGTERM);
 
     if (config->verbosity()) {
+        std::cout << "binding to " << traf_config->bind_ip << std::endl;
         std::cout << "flaming target(s) [";
         for (uint i = 0; i < 3; i++) {
-            std::cout << traf_config->target_address[i];
-            if (i == traf_config->target_address.size()-1) {
+            std::cout << traf_config->target_list[i].address;
+            if (i == traf_config->target_list.size()-1) {
                 break;
             }
             else {
                 std::cout << ", ";
             }
         }
-        if (traf_config->target_address.size() > 3) {
-            std::cout << "and " << traf_config->target_address.size()-3 << " more";
+        if (traf_config->target_list.size() > 3) {
+            std::cout << "and " << traf_config->target_list.size()-3 << " more";
         }
         std::cout << "] on port "
                   << args["-p"].asLong()
@@ -428,6 +508,10 @@ int main(int argc, char *argv[])
         std::cout << "query generator [" << qgen->name() << "] contains " << qgen->size() << " record(s)" << std::endl;
         if (args["-R"].asBool()) {
             std::cout << "query list randomized" << std::endl;
+        }
+        if (config->rate_limit()) {
+            std::cout << "rate limit @ " << config->rate_limit() << " QPS (" << config->rate_limit() / static_cast<double>(c_count) <<
+            " QPS per concurrent sender)" << std::endl;
         }
     }
 

@@ -15,10 +15,7 @@ if (NOT CMAKE_BUILD_TYPE)
 endif()
 # ::-------------------------------------------------------------------------::
 
-# this is the source of truth for flamethrower version, which will be written to flame.h include file.
-project(flamethrower VERSION 0.10.0)
-set(FLAME_VERSION_NUM ${PROJECT_VERSION})
-set(FLAME_VERSION "Flamethrower ${PROJECT_VERSION}")
+project(flamethrower VERSION 0.11.0)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
@@ -46,93 +43,136 @@ add_compile_options(-Wall)
 
 find_package(PkgConfig REQUIRED)
 
+include(sanitizer)
+
 pkg_search_module(LIBLDNS REQUIRED libldns ldns)
-pkg_check_modules(LIBUV REQUIRED libuv)
+pkg_check_modules(LIBUV REQUIRED libuv>=1.23)
 pkg_check_modules(LIBGNUTLS REQUIRED gnutls>=3.3)
 
 option(QUIC_ENABLE "Enable QUIC support" OFF)
 if (QUIC_ENABLE)
     pkg_check_modules(OPENSSL REQUIRED libcrypto>=1.0.2)
     message(STATUS "QUIC support is enabled")
+    add_definitions(-DQUIC_ENABLE)
 else()
     message(STATUS "QUIC support is disabled")
+endif()
+
+option(DOH_ENABLE "Enable DNS over HTTPS (DoH) support" OFF)
+if (DOH_ENABLE)
+    pkg_search_module(LIBNGHTTP2 REQUIRED nghttp2 libnghttp2)
+    message(STATUS "DNS over HTTPS (DoH) support is enabled")
+    add_definitions(-DDOH_ENABLE)
+else ()
+    message(STATUS "DNS over HTTPS (DoH) support is disabled")
 endif()
 
 # ::-------------------------------------------------------------------------:: 
 # BUILD TARGETS
 # ::-------------------------------------------------------------------------:: 
 
-add_library(flamecore
-        flame/metrics.cpp
-        flame/metrics.h
-        flame/query.cpp
-        flame/query.h
-        flame/trafgen.cpp
-        flame/trafgen.h
-        flame/tcpsession.cpp
-        flame/tcpsession.h
-        flame/tcptlssession.cpp
-        flame/tcptlssession.h
-        flame/utils.cpp
-        flame/utils.h)
+set(flamecore_src
+    flame/metrics.cpp
+    flame/metrics.h
+    flame/query.cpp
+    flame/query.h
+    flame/target.h
+    flame/trafgen.cpp
+    flame/trafgen.h
+    flame/tcpsession.cpp
+    flame/tcpsession.h
+    flame/tcptlssession.cpp
+    flame/tcptlssession.h
+    flame/utils.cpp
+    flame/utils.h
+    )
 
-target_include_directories(flamecore
-        PUBLIC ${LIBUV_INCLUDE_DIRS}
-        PUBLIC ${LIBLDNS_INCLUDE_DIRS}
-        PRIVATE ${LIBGNUTLS_INCLUDE_DIRS}
+set(flamecore_dirs
+    PUBLIC ${LIBUV_INCLUDE_DIRS}
+    PUBLIC ${LIBLDNS_INCLUDE_DIRS}
+    PUBLIC ${LIBGNUTLS_INCLUDE_DIRS}
+    PUBLIC "${CMAKE_SOURCE_DIR}/3rd/docopt.cpp"
+    PUBLIC "${CMAKE_SOURCE_DIR}/3rd/json"
+    PUBLIC "${CMAKE_SOURCE_DIR}/3rd/url-parser"
+    PUBLIC "${CMAKE_SOURCE_DIR}/3rd/uvw"
+    )
+
+set(flamecore_libs
+    PRIVATE ${LIBUV_LDFLAGS}
+    PRIVATE ${LIBUV_LIBRARIES}
+    PRIVATE ${LIBLDNS_LDFLAGS}
+    PRIVATE ${LIBLDNS_LIBRARIES}
+    PRIVATE ${LIBGNUTLS_LDFLAGS}
+    PRIVATE ${LIBGNUTLS_LIBRARIES}
+    )
+
+set(flame_execs
+    3rd/docopt.cpp/docopt.cpp
+    3rd/url-parser/url_parser.c
+    flame/main.cpp
+    )
+
+if (DOH_ENABLE)
+    set(flamecore_src 
+        ${flamecore_src}
+        flame/http.h
+        flame/httpssession.cpp
+        flame/httpssession.h
         )
 
-target_include_directories(flamecore SYSTEM
-        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/TokenBucket"
-        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/docopt.cpp"
-        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/json"
-        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/uvw"
+    set(flamecore_dirs
+        ${flamecore_dirs}
+        PUBLIC ${LIBNGHTTP2_INCLUDE_DIRS}
+        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/base64url"
         )
 
-target_link_libraries(flamecore
-        PRIVATE ${LIBUV_LDFLAGS}
-        PRIVATE ${LIBLDNS_LDFLAGS}
-        PRIVATE ${LIBLDNS_LIBRARIES}
-        PRIVATE ${LIBGNUTLS_LDFLAGS}
-        PRIVATE ${LIBGNUTLS_LIBRARIES}
+    set(flamecore_libs
+        ${flamecore_libs}
+        PRIVATE ${LIBNGHTTP2_LDFLAGS}
+        PRIVATE ${LIBNGHTTP2_LIBRARIES}
         )
+
+    set(flame_execs
+        ${flame_execs}
+        3rd/base64url/base64.cpp
+        )
+endif()
 
 if (QUIC_ENABLE)
-target_include_directories(flamecore
-        PUBLIC ${OPENSSL_INCLUDE_DIRS}
-        )
-target_include_directories(flamecore SYSTEM
-        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/quicly/include"
-        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/quicly/deps/picotls/include"
-        )
-target_link_libraries(flamecore
-        PRIVATE ${OPENSSL_LIBRARIES}
-        PRIVATE "-L ${CMAKE_SOURCE_DIR}/3rd/quicly/build/ -lquicly"
-        picotls
-        )
-add_library(picotls STATIC
+    set(flamecore_src 
+        ${flamecore_src}
         3rd/quicly/deps/picotls/lib/openssl.c
         3rd/quicly/deps/picotls/lib/pembase64.c
         3rd/quicly/deps/picotls/lib/picotls.c
-)
+        )
 
-target_include_directories(picotls
-        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/quicly/deps/picotls/include"
+    set(flamecore_dirs
+        ${flamecore_dirs}
         PUBLIC ${OPENSSL_INCLUDE_DIRS}
-)
+        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/quicly/include"
+        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/quicly/deps/picotls/include"
+        )
 
-target_link_libraries(picotls
+    set(flamecore_libs
+        ${flamecore_libs}
+        PRIVATE ${OPENSSL_LIBRARIES}
+        PRIVATE "-L ${CMAKE_SOURCE_DIR}/3rd/quicly/build/ -lquicly"
         PUBLIC ${OPENSSL_LDFLAGS}
-)
+        )
 endif()
 
-add_executable(flame
-        3rd/docopt.cpp/docopt.cpp
-        flame/main.cpp
-        )
+add_library(flamecore ${flamecore_src})
+
+target_include_directories(flamecore ${flamecore_dirs})
+
+target_link_libraries(flamecore ${flamecore_libs})
+
+add_executable(flame ${flame_execs})
 
 target_link_libraries(flame
         PRIVATE flamecore
+        PRIVATE ${LIBUV_LDFLAGS}
+        PRIVATE ${LIBUV_LIBRARIES}
         )
 
 add_executable(tests
@@ -152,6 +192,7 @@ target_link_libraries(tests
         PRIVATE flamecore
         )
 
-include_directories(${CMAKE_CURRENT_BINARY_DIR})
-configure_file(flame/flame.h.in flame.h @ONLY)
-
+install(TARGETS flame flamecore
+        RUNTIME DESTINATION bin
+        LIBRARY DESTINATION lib${LIB_SUFFIX}
+        ARCHIVE DESTINATION lib/static)

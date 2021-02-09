@@ -6,7 +6,7 @@
 
 #include "json.hpp"
 #include "metrics.h"
-#include "flame.h"
+#include "version.h"
 
 #include <ldns/util.h>
 
@@ -16,7 +16,7 @@ extern ldns_lookup_table ldns_rcodes[];
 
 std::shared_ptr<Metrics> MetricsMgr::create_trafgen_metrics()
 {
-    auto m = std::make_shared<Metrics>(_loop, *this);
+    auto m = std::make_shared<Metrics>(_loop);
     _metrics.push_back(m);
     return m;
 }
@@ -80,6 +80,7 @@ void MetricsMgr::flush_to_disk()
 {
     update_runtime();
     json j;
+    j["period_number"] = _aggregate_count;
     j["total_s_count"] = _agg_total_s_count;
     j["total_r_count"] = _agg_total_r_count;
     j["period_timeouts"] = _agg_period_timeouts;
@@ -164,11 +165,15 @@ void MetricsMgr::aggregate(bool no_avgs)
         }
 
         // TODO avg of averages, here be dragons
+        auto rcv_cnt = 0;
         for (const auto &i : _metrics) {
-            _agg_period_response_avg_ms += i->_period_response_avg_ms;
+            if (i->_period_r_count) {
+                rcv_cnt++;
+                _agg_period_response_avg_ms += i->_period_response_avg_ms;
+            }
             _agg_period_pkt_size_avg += i->_period_pkt_size_avg;
         }
-        _agg_period_response_avg_ms /= _metrics.size();
+        _agg_period_response_avg_ms /= rcv_cnt;
         _agg_period_pkt_size_avg /= _metrics.size();
         if (_agg_period_response_avg_ms) {
             _agg_total_response_avg_ms = (_agg_period_response_avg_ms + (_agg_total_response_avg_ms * (_aggregate_count - 1))) / _aggregate_count;
@@ -244,6 +249,7 @@ void MetricsMgr::aggregate_trafgen(const Metrics *m)
     if (_per_trafgen_metrics && _metric_file.is_open()) {
         // record per trafgen metrics to out file
         json j;
+        j["period_number"] = _aggregate_count;
         j["period_s_count"] = m->_period_s_count;
         j["period_r_count"] = m->_period_r_count;
         j["run_id"] = _run_id;
@@ -295,7 +301,7 @@ void MetricsMgr::aggregate_trafgen(const Metrics *m)
 
     if (_agg_total_response_max_ms == 0) {
         _agg_total_response_max_ms = m->_period_response_max_ms;
-    } else if (m->_period_response_max_ms && m->_period_response_max_ms > _agg_period_response_max_ms) {
+    } else if (m->_period_response_max_ms && m->_period_response_max_ms > _agg_total_response_max_ms) {
         _agg_total_response_max_ms = m->_period_response_max_ms;
     }
 
