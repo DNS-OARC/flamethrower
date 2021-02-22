@@ -219,19 +219,16 @@ int main(int argc, char *argv[])
     } else if (args["-P"].asString() == "udp") {
         proto = Protocol::UDP;
     }
-#ifdef QUIC_ENABLE
     else if (args["-P"].asString() == "quic") {
-        proto = Protocol::QUIC;
-    }
-#endif
-    else {
-        std::cerr << "protocol must be 'udp', 'tcp', 'dot', 'doh'";
 #ifdef QUIC_ENABLE
-        std::cerr << ", 'quic'";
+        proto = Protocol::QUIC;
 #else
-        std::cerr << " (quic support is disabled)";
+			std::cerr << "DNS over QUIC support is not enabled" << std::endl;
+			return 1;
 #endif
-        std::cerr << std::endl;
+    }
+    else {
+        std::cerr << "protocol must be 'udp', 'tcp', 'dot', 'doh', 'quic'" << std::endl;
         return 1;
     }
 
