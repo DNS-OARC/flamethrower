@@ -295,7 +295,7 @@ void TrafGen::quic_send()
 
     uint16_t id{0};
     for (int i = 0; i < _traf_config->batch_count; i++) {
-        if (_rate_limit && !_rate_limit->consume(1))
+        if (_rate_limit && !_rate_limit->consume(1, this->_loop->now()))
             return;
         if (_free_id_list.size() == 0) {
             std::cerr << "max in flight reached" << std::endl;
@@ -322,25 +322,26 @@ void TrafGen::quic_send()
         _in_flight[id].send_time = std::chrono::high_resolution_clock::now();
     }
 
-    quicly_datagram_t *dgrams[16];
+    quicly_address_t dest, src;
+    struct iovec dgrams[16];
     size_t num_dgrams = sizeof(dgrams) / sizeof(dgrams[0]);
-    int ret = quicly_send(q_conn, dgrams, &num_dgrams);
+    uint8_t dgrams_buf[num_dgrams * q_ctx.transport_params.max_udp_payload_size];
+    int ret = quicly_send(q_conn, &dest, &src, dgrams, &num_dgrams, dgrams_buf, sizeof(dgrams_buf));
     switch (ret) {
         case 0: {
             size_t i;
             for (i = 0; i != num_dgrams; ++i) {
                 // XXX libuv needs to own this since it frees async
-                char *data = (char*)std::malloc(dgrams[i]->data.len);
-                memcpy(data, dgrams[i]->data.base, dgrams[i]->data.len);
+                char *data = (char*)std::malloc(dgrams[i].iov_len);
+                memcpy(data, dgrams[i].iov_base, dgrams[i].iov_len);
                 if (data == nullptr) {
                     throw std::runtime_error("unable to allocate datagram memory");
                 }
                 if (_traf_config->family == AF_INET) {
-                    _udp_handle->send<uvw::IPv4>(_traf_config->next_target().address, _traf_config->port, data, dgrams[i]->data.len);
+                    _udp_handle->send<uvw::IPv4>(_traf_config->next_target().address, _traf_config->port, data, dgrams[i].iov_len);
                 } else {
-                    _udp_handle->send<uvw::IPv6>(_traf_config->next_target().address, _traf_config->port, data, dgrams[i]->data.len);
+                    _udp_handle->send<uvw::IPv6>(_traf_config->next_target().address, _traf_config->port, data, dgrams[i].iov_len);
                 }
-                q_ctx.packet_allocator->free_packet(q_ctx.packet_allocator, dgrams[i]);
             }
         } break;
         case QUICLY_ERROR_FREE_CONNECTION:
@@ -394,27 +395,24 @@ void TrafGen::udp_send()
 }
 
 #ifdef QUIC_ENABLE
-static int q_on_stop_sending(quicly_stream_t *stream, int err)
+static void q_on_stop_sending(quicly_stream_t *stream, int err)
 {
     std::cerr << "QUIC received STOP_SENDING: " << PRIu16 << "\n" << QUICLY_ERROR_GET_ERROR_CODE(err) << std::endl;
     quicly_close(stream->conn, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0), "");
-    return 0;
 }
 
-static int q_on_receive_reset(quicly_stream_t *stream, int err)
+static void q_on_receive_reset(quicly_stream_t *stream, int err)
 {
     std::cerr << "QUIC received RESET_STREAM: " << PRIu16 << "\n" << QUICLY_ERROR_GET_ERROR_CODE(err) << std::endl;
     quicly_close(stream->conn, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0), "");
-    return 0;
 }
 
-static int q_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
+static void q_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
 {
-    int ret;
 
     /* read input to receive buffer */
-    if ((ret = quicly_streambuf_ingress_receive(stream, off, src, len)) != 0)
-        return ret;
+    if (quicly_streambuf_ingress_receive(stream, off, src, len) != 0)
+        return ;
 
     /* obtain contiguous bytes from the receive buffer */
     ptls_iovec_t input = quicly_streambuf_ingress_get(stream);
@@ -425,8 +423,6 @@ static int q_on_receive(quicly_stream_t *stream, size_t off, const void *src, si
 
     /* remove used bytes from receive buffer */
     quicly_streambuf_ingress_shift(stream, input.len);
-
-    return 0;
 }
 
 static int q_on_stream_open(quicly_stream_open_t *self, quicly_stream_t *stream)
@@ -465,13 +461,10 @@ void TrafGen::start_quic()
         _metrics->net_error();
     });
 
-    socklen_t salen{0};
     if (_traf_config->family == AF_INET) {
         _udp_handle->bind<uvw::IPv4>("0.0.0.0", 0);
-        salen = sizeof(sockaddr_in);
     } else {
         _udp_handle->bind<uvw::IPv6>("::0", 0, uvw::UDPHandle::Bind::IPV6ONLY);
-        salen = sizeof(sockaddr_in6);
     }
 
     _metrics->trafgen_id(_udp_handle->sock().port);
@@ -483,7 +476,8 @@ void TrafGen::start_quic()
     sa.ss_family = _traf_config->family;
     inet_pton(sa.ss_family, addr.data(), sa_ptr->sa_data);
     if ((ret = quicly_connect(&q_conn, &q_ctx, addr.data(),
-                              (struct sockaddr*)&sa, salen, &q_next_cid, NULL, NULL)) != 0) {
+                    NULL, (struct sockaddr*)&sa, &q_next_cid,
+                    ptls_iovec_init(NULL, 0), NULL, NULL)) != 0) {
         throw std::runtime_error("quicly connect failed: " + std::to_string(ret));
     }
 
@@ -590,17 +584,17 @@ void TrafGen::stop()
 #ifdef QUIC_ENABLE
 void TrafGen::q_process_msg(quicly_conn_t *conn, const uint8_t *src, size_t dgram_len)
 {
-    size_t off, packet_len;
+    size_t off = 0;
     assert(conn);
 
     /* split UDP datagram into multiple QUIC packets */
-    for (off = 0; off < dgram_len; off += packet_len) {
+    while (off < dgram_len) {
         quicly_decoded_packet_t decoded;
-        if ((packet_len = quicly_decode_packet(&q_ctx, &decoded, src, dgram_len - off)) == SIZE_MAX)
+        if (quicly_decode_packet(&q_ctx, &decoded, src, dgram_len, &off) == SIZE_MAX)
             return;
         /* TODO match incoming packets to connections, handle version negotiation, rebinding, retry, etc. */
         /* let the current connection handle ingress packets */
-        quicly_receive(conn, &decoded);
+        quicly_receive(conn, NULL, NULL, &decoded);
     }
 }
 #endif
