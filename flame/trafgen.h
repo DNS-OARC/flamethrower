@@ -107,7 +107,7 @@ class TrafGen
 #ifdef QUIC_ENABLE
     void start_quic();
     void quic_send();
-    void q_process_msg(quicly_conn_t *conn, const uint8_t *src, size_t dgram_len);
+    void q_process_msg(quicly_conn_t *conn, const uint8_t *src, const uvw::Addr *src_addr, size_t dgram_len);
 #endif
 
 public:

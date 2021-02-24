@@ -483,7 +483,7 @@ void TrafGen::start_quic()
     }
 
     _udp_handle->on<uvw::UDPDataEvent>([this](const uvw::UDPDataEvent &event, uvw::UDPHandle &h) {
-        q_process_msg(q_conn, (const uint8_t*)event.data.get(), event.length);
+        q_process_msg(q_conn, (const uint8_t*)event.data.get(), &event.sender, event.length);
     });
 
     _udp_handle->recv();
@@ -583,7 +583,7 @@ void TrafGen::stop()
 }
 
 #ifdef QUIC_ENABLE
-void TrafGen::q_process_msg(quicly_conn_t *conn, const uint8_t *src, size_t dgram_len)
+void TrafGen::q_process_msg(quicly_conn_t *conn, const uint8_t *src, const uvw::Addr *src_addr, size_t dgram_len)
 {
     size_t off = 0;
     assert(conn);
@@ -595,7 +595,16 @@ void TrafGen::q_process_msg(quicly_conn_t *conn, const uint8_t *src, size_t dgra
             return;
         /* TODO match incoming packets to connections, handle version negotiation, rebinding, retry, etc. */
         /* let the current connection handle ingress packets */
-        quicly_receive(conn, NULL, NULL, &decoded);
+        if (_traf_config->family == AF_INET) {
+            sockaddr_in sa;
+            uv_ip4_addr(src_addr->ip.data(), src_addr->port, &sa);
+            quicly_receive(conn, NULL, (sockaddr *) &sa, &decoded);
+        } else {
+            sockaddr_in6 sa;
+            uv_ip6_addr(src_addr->ip.data(), src_addr->port, &sa);
+            quicly_receive(conn, NULL, (sockaddr *) &sa, &decoded);
+        }
+
     }
 }
 #endif
