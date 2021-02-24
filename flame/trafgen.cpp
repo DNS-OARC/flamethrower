@@ -13,6 +13,7 @@
 #include <picotls.h>
 #include <picotls/openssl.h>
 #include <quicly/defaults.h>
+static quicly_cid_plaintext_t q_next_cid;
 #endif
 
 TrafGen::TrafGen(std::shared_ptr<uvw::Loop> l,
@@ -476,7 +477,7 @@ void TrafGen::start_quic()
     sa.ss_family = _traf_config->family;
     inet_pton(sa.ss_family, addr.data(), sa_ptr->sa_data);
     if ((ret = quicly_connect(&q_conn, &q_ctx, addr.data(),
-                    NULL, (struct sockaddr*)&sa, &q_next_cid,
+                    (struct sockaddr*)&sa, NULL, &q_next_cid,
                     ptls_iovec_init(NULL, 0), NULL, NULL)) != 0) {
         throw std::runtime_error("quicly connect failed: " + std::to_string(ret));
     }

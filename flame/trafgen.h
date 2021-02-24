@@ -91,7 +91,6 @@ class TrafGen
     quicly_conn_t *q_conn;
     quicly_stream_open_t q_stream_open;
     quicly_context_t q_ctx;
-    quicly_cid_plaintext_t q_next_cid;
     ptls_context_t q_tlsctx;
 #endif
 
