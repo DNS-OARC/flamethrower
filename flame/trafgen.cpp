@@ -590,22 +590,44 @@ void TrafGen::q_process_msg(quicly_conn_t *conn, const uint8_t *src, const uvw::
     size_t off = 0;
     assert(conn);
 
+    // The first 2 bytes are the query ID.
+    u_int16_t id = ntohs(*(u_int16_t *)src);
+
+    if (_in_flight.find(id) == _in_flight.end()) {
+        if (_config->verbosity() > 1) {
+            std::cerr << "untracked " << id << std::endl;
+        }
+        _metrics->bad_receive(_in_flight.size());
+        return;
+    }
+
     /* split UDP datagram into multiple QUIC packets */
     while (off < dgram_len) {
         quicly_decoded_packet_t decoded;
-        if (quicly_decode_packet(&q_ctx, &decoded, src, dgram_len, &off) == SIZE_MAX)
+        if (quicly_decode_packet(&q_ctx, &decoded, src, dgram_len, &off) == SIZE_MAX) {
+            _metrics->bad_receive(_in_flight.size());
             return;
+        }
         /* TODO match incoming packets to connections, handle version negotiation, rebinding, retry, etc. */
         /* let the current connection handle ingress packets */
         if (_traf_config->family == AF_INET) {
             sockaddr_in sa;
             uv_ip4_addr(src_addr->ip.data(), src_addr->port, &sa);
-            quicly_receive(conn, NULL, (sockaddr *) &sa, &decoded);
+            if (quicly_receive(conn, NULL, (sockaddr *) &sa, &decoded)) {
+                _metrics->bad_receive(_in_flight.size());
+                return;
+            }
         } else {
             sockaddr_in6 sa;
             uv_ip6_addr(src_addr->ip.data(), src_addr->port, &sa);
-            quicly_receive(conn, NULL, (sockaddr *) &sa, &decoded);
+            if (quicly_receive(conn, NULL, (sockaddr *) &sa, &decoded)) {
+                _metrics->bad_receive(_in_flight.size());
+                return;
+            }
         }
+    _metrics->receive(_in_flight[id].send_time, 0, _in_flight.size());
+    _in_flight.erase(id);
+    _free_id_list.push_back(id);
 
     }
 }
