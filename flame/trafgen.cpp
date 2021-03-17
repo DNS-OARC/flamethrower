@@ -475,12 +475,17 @@ void TrafGen::start_quic()
     int ret;
     auto addr = _traf_config->next_target().address;
     struct sockaddr_storage sa;
+    ptls_handshake_properties_t handpro = {0};
+    ptls_iovec_t alpn = ptls_iovec_init("doq", 3);
+    handpro.client.negotiated_protocols.list = &alpn;
+    handpro.client.negotiated_protocols.count = 1;
+
     sockaddr* sa_ptr = (sockaddr*)&sa;
     sa.ss_family = _traf_config->family;
     inet_pton(sa.ss_family, addr.data(), sa_ptr->sa_data);
     if ((ret = quicly_connect(&q_conn, &q_ctx, addr.data(),
                     (struct sockaddr*)&sa, NULL, &q_next_cid,
-                    ptls_iovec_init(NULL, 0), NULL, NULL)) != 0) {
+                    ptls_iovec_init(NULL, 0), &handpro, NULL)) != 0) {
         throw std::runtime_error("quicly connect failed: " + std::to_string(ret));
     }
 
