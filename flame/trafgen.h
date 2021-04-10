@@ -38,6 +38,19 @@ enum class Protocol {
     DOT,
 };
 
+#ifdef QUIC_ENABLE
+/* needed to pass context to callback functions */
+typedef struct {
+    quicly_stream_open_t stream_open;
+    void *user_ctx;
+} custom_quicly_stream_open_t;
+
+typedef struct {
+    quicly_streambuf_t sb;
+    void *user_ctx;
+} custom_quicly_streambuf_t;
+#endif
+
 struct TrafGenConfig {
     std::vector<Target> target_list;
     unsigned int _current_target{0};
@@ -89,7 +102,8 @@ class TrafGen
 
 #ifdef QUIC_ENABLE
     quicly_conn_t *q_conn;
-    quicly_stream_open_t q_stream_open;
+    custom_quicly_stream_open_t q_stream_open;
+    quicly_closed_by_remote_t q_closed_by_remote;
     quicly_context_t q_ctx;
     ptls_context_t q_tlsctx;
 #endif
@@ -105,9 +119,12 @@ class TrafGen
     void start_wait_timer_for_tcp_finish();
 
 #ifdef QUIC_ENABLE
+    int send_pending(quicly_conn_t *conn);
     void start_quic();
     void quic_send();
     void q_process_msg(quicly_conn_t *conn, const uint8_t *src, const uvw::Addr *src_addr, size_t dgram_len);
+    static void q_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len);
+    static int q_on_stream_open(quicly_stream_open_t *self, quicly_stream_t *stream);
 #endif
 
 public:

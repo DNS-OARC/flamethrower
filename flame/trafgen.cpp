@@ -282,6 +282,47 @@ void TrafGen::start_wait_timer_for_tcp_finish()
 }
 
 #ifdef QUIC_ENABLE
+
+int TrafGen::send_pending(quicly_conn_t *conn)
+{
+    quicly_address_t dest, src;
+    struct iovec packets[10];
+    uint8_t buf[10 * quicly_get_context(conn)->transport_params.max_udp_payload_size];
+    size_t num_packets = 10;
+    int ret;
+
+    if ((ret = quicly_send(conn, &dest, &src, packets, &num_packets, buf, sizeof(buf))) == 0 && num_packets != 0) {
+
+        switch (ret) {
+            case 0: {
+                        size_t i;
+                        for (i = 0; i != num_packets; ++i) {
+                            // XXX libuv needs to own this since it frees async
+                            char *data = (char*)std::malloc(packets[i].iov_len);
+                            memcpy(data, packets[i].iov_base, packets[i].iov_len);
+                            if (data == nullptr) {
+                                throw std::runtime_error("unable to allocate datagram memory");
+                            }
+                            if (_traf_config->family == AF_INET) {
+                                _udp_handle->send<uvw::IPv4>(_traf_config->next_target().address, _traf_config->port, data, packets[i].iov_len);
+                            } else {
+                                _udp_handle->send<uvw::IPv6>(_traf_config->next_target().address, _traf_config->port, data, packets[i].iov_len);
+                            }
+                        }
+                    } break;
+            case QUICLY_ERROR_FREE_CONNECTION:
+                    /* connection has been closed, free, and exit when running as a client */
+                    quicly_free(conn);
+                    q_conn = NULL;
+                    return ret;
+            default:
+                    std::cerr << "quicly_send returned" << std::endl;
+                    return ret;
+        }
+    }
+    return ret;
+}
+
 void TrafGen::quic_send()
 {
 
@@ -303,6 +344,7 @@ void TrafGen::quic_send()
             return;
         }
         id = _free_id_list.back();
+
         _free_id_list.pop_back();
         assert(_in_flight.find(id) == _in_flight.end());
         auto qt = _qgen->next_udp(id);
@@ -408,9 +450,11 @@ static void q_on_receive_reset(quicly_stream_t *stream, int err)
     quicly_close(stream->conn, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0), "");
 }
 
-static void q_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
+void TrafGen::q_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
 {
 
+    custom_quicly_streambuf_t *sbuf = (custom_quicly_streambuf_t *) stream->data;
+    TrafGen *ctx = (TrafGen *) sbuf->user_ctx;
     /* read input to receive buffer */
     if (quicly_streambuf_ingress_receive(stream, off, src, len) != 0)
         return ;
@@ -418,27 +462,49 @@ static void q_on_receive(quicly_stream_t *stream, size_t off, const void *src, s
     /* obtain contiguous bytes from the receive buffer */
     ptls_iovec_t input = quicly_streambuf_ingress_get(stream);
 
-    /* initiate connection close after receiving all data */
-    if (quicly_recvstate_transfer_complete(&stream->recvstate))
-        quicly_close(stream->conn, 0, "");
+    u_int16_t id = ntohs(*(u_int16_t *)input.base);
+    ctx->_metrics->receive(ctx->_in_flight[id].send_time, 0, ctx->_in_flight.size());
+    ctx->_in_flight.erase(id);
+    ctx->_free_id_list.push_back(id);
 
     /* remove used bytes from receive buffer */
     quicly_streambuf_ingress_shift(stream, input.len);
 }
 
-static int q_on_stream_open(quicly_stream_open_t *self, quicly_stream_t *stream)
+int TrafGen::q_on_stream_open(quicly_stream_open_t *self, quicly_stream_t *stream)
 {
+    custom_quicly_stream_open_t *self_ptr = (custom_quicly_stream_open_t *) self;
     static const quicly_stream_callbacks_t stream_callbacks = {
         quicly_streambuf_destroy, quicly_streambuf_egress_shift, quicly_streambuf_egress_emit, q_on_stop_sending, q_on_receive,
         q_on_receive_reset};
     int ret;
 
-    if ((ret = quicly_streambuf_create(stream, sizeof(quicly_streambuf_t))) != 0)
+    if ((ret = quicly_streambuf_create(stream, sizeof(custom_quicly_streambuf_t))) != 0)
         return ret;
+    custom_quicly_streambuf_t *sbuf = (custom_quicly_streambuf_t *) stream->data;
+    sbuf->user_ctx = self_ptr->user_ctx;
+
     stream->callbacks = &stream_callbacks;
     return 0;
 }
 
+static void q_on_closed_by_remote(quicly_closed_by_remote_t *self, quicly_conn_t *conn, int err, uint64_t frame_type,
+                                const char *reason, size_t reason_len)
+{
+    if (QUICLY_ERROR_IS_QUIC_TRANSPORT(err)) {
+        fprintf(stderr, "transport close:code=0x%" PRIx16 ";frame=%" PRIu64 ";reason=%.*s\n", QUICLY_ERROR_GET_ERROR_CODE(err),
+                frame_type, (int)reason_len, reason);
+    } else if (QUICLY_ERROR_IS_QUIC_APPLICATION(err)) {
+        fprintf(stderr, "application close:code=0x%" PRIx16 ";reason=%.*s\n", QUICLY_ERROR_GET_ERROR_CODE(err), (int)reason_len,
+                reason);
+    } else if (err == QUICLY_ERROR_RECEIVED_STATELESS_RESET) {
+        fprintf(stderr, "stateless reset\n");
+    } else if (err == QUICLY_ERROR_NO_COMPATIBLE_VERSION) {
+        fprintf(stderr, "no compatible version\n");
+    } else {
+        fprintf(stderr, "unexpected close:code=%d\n", err);
+    }
+}
 
 void TrafGen::start_quic()
 {
@@ -450,11 +516,13 @@ void TrafGen::start_quic()
         .key_exchanges = ptls_openssl_key_exchanges,
         .cipher_suites = ptls_openssl_cipher_suites,
     };
-    q_stream_open = {q_on_stream_open};
+    q_stream_open = {{q_on_stream_open}, this};
+    q_closed_by_remote = {q_on_closed_by_remote};
     q_ctx = quicly_spec_context;
     q_ctx.tls = &q_tlsctx;
     quicly_amend_ptls_context(q_ctx.tls);
-    q_ctx.stream_open = &q_stream_open;
+    q_ctx.stream_open = (quicly_stream_open_t *) &q_stream_open;
+    q_ctx.closed_by_remote = &q_closed_by_remote;
 
     _udp_handle = _loop->resource<uvw::UDPHandle>(_traf_config->family);
 
@@ -595,44 +663,29 @@ void TrafGen::q_process_msg(quicly_conn_t *conn, const uint8_t *src, const uvw::
     size_t off = 0;
     assert(conn);
 
-    // The first 2 bytes are the query ID.
-    u_int16_t id = ntohs(*(u_int16_t *)src);
-
-    if (_in_flight.find(id) == _in_flight.end()) {
-        if (_config->verbosity() > 1) {
-            std::cerr << "untracked " << id << std::endl;
-        }
-        _metrics->bad_receive(_in_flight.size());
-        return;
-    }
-
     /* split UDP datagram into multiple QUIC packets */
     while (off < dgram_len) {
         quicly_decoded_packet_t decoded;
         if (quicly_decode_packet(&q_ctx, &decoded, src, dgram_len, &off) == SIZE_MAX) {
             _metrics->bad_receive(_in_flight.size());
-            return;
+            continue;
         }
         /* TODO match incoming packets to connections, handle version negotiation, rebinding, retry, etc. */
+
+        int ret;
         /* let the current connection handle ingress packets */
+        sockaddr sa;
         if (_traf_config->family == AF_INET) {
-            sockaddr_in sa;
-            uv_ip4_addr(src_addr->ip.data(), src_addr->port, &sa);
-            if (quicly_receive(conn, NULL, (sockaddr *) &sa, &decoded)) {
-                _metrics->bad_receive(_in_flight.size());
-                return;
-            }
+            uv_ip4_addr(src_addr->ip.data(), src_addr->port, (sockaddr_in *) &sa);
         } else {
-            sockaddr_in6 sa;
-            uv_ip6_addr(src_addr->ip.data(), src_addr->port, &sa);
-            if (quicly_receive(conn, NULL, (sockaddr *) &sa, &decoded)) {
-                _metrics->bad_receive(_in_flight.size());
-                return;
-            }
+            uv_ip6_addr(src_addr->ip.data(), src_addr->port, (sockaddr_in6 *) &sa);
         }
-    _metrics->receive(_in_flight[id].send_time, 0, _in_flight.size());
-    _in_flight.erase(id);
-    _free_id_list.push_back(id);
+        ret = quicly_receive(conn, NULL, &sa, &decoded);
+
+        send_pending(conn);
+        if (ret != 0 && ret != QUICLY_ERROR_PACKET_IGNORED) {
+            return;
+        }
 
     }
 }
