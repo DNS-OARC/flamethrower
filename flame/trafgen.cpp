@@ -31,14 +31,20 @@ TrafGen::TrafGen(std::shared_ptr<uvw::Loop> l,
     , _stopping(false)
 {
     // build a list of random ids we will use for queries
-    for (uint16_t i = 0; i < std::numeric_limits<uint16_t>::max(); i++)
-        _free_id_list.push_back(i);
     std::random_device rd;
     std::mt19937 g(rd());
-    std::shuffle(_free_id_list.begin(), _free_id_list.end(), g);
-    // allocate enough space for the amount of queries we expect to have in flight
-    // max here is based on uint16, the number of ids
-    _in_flight.reserve(std::numeric_limits<uint16_t>::max());
+    if (_traf_config->protocol != Protocol::QUIC) {
+        for (uint16_t i = 0; i < std::numeric_limits<uint16_t>::max(); i++)
+            _free_id_list.push_back(i);
+        std::shuffle(_free_id_list.begin(), _free_id_list.end(), g);
+        // allocate enough space for the amount of queries we expect to have in flight
+        // max here is based on uint16, the number of ids
+        _in_flight.reserve(std::numeric_limits<uint16_t>::max());
+    } else {
+        // same max as above, to mimic the behavior of the other protocols,
+        // even if the streams_id use an uint64_t
+        _open_streams.reserve(std::numeric_limits<uint16_t>::max());
+    }
 }
 
 void TrafGen::process_wire(const char data[], size_t len)
@@ -330,29 +336,23 @@ void TrafGen::quic_send()
         return;
     if (_qgen->finished())
         return;
-    if (_free_id_list.size() == 0) {
-        std::cerr << "max in flight reached" << std::endl;
-        return;
-    }
 
-    uint16_t id{0};
+    quicly_stream_id_t id{0};
     for (int i = 0; i < _traf_config->batch_count; i++) {
-        if (_rate_limit && !_rate_limit->consume(1, this->_loop->now()))
-            return;
-        if (_free_id_list.size() == 0) {
+        if (_open_streams.size() == std::numeric_limits<uint16_t>::max()) {
             std::cerr << "max in flight reached" << std::endl;
             return;
         }
-        id = _free_id_list.back();
-
-        _free_id_list.pop_back();
-        assert(_in_flight.find(id) == _in_flight.end());
-        auto qt = _qgen->next_udp(id);
+        if (_rate_limit && !_rate_limit->consume(1, this->_loop->now()))
+            return;
+        //in doq, all dns messages ID are set to 0
+        auto qt = _qgen->next_udp(0);
 
         quicly_stream_t *stream; /* we retain the opened stream via the on_stream_open callback */
         quicly_open_stream(q_conn, &stream, 0);
         if (!quicly_sendstate_is_open(&stream->sendstate))
             return;
+        id = stream->stream_id;
 
         /* write data to send buffer */
         quicly_streambuf_egress_write(stream, (void*)std::get<0>(qt).get(), std::get<1>(qt));
@@ -361,8 +361,8 @@ void TrafGen::quic_send()
         // in UDP, this buffer gets freed by libuv after send. in quic, it gets copied internally to
         // quic datagram, so this can be freed immediately
 
-        _metrics->send(std::get<1>(qt), 1, _in_flight.size());
-        _in_flight[id].send_time = std::chrono::high_resolution_clock::now();
+        _metrics->send(std::get<1>(qt), 1, _open_streams.size());
+        _open_streams[id].send_time = std::chrono::high_resolution_clock::now();
     }
 
     quicly_address_t dest, src;
@@ -462,10 +462,9 @@ void TrafGen::q_on_receive(quicly_stream_t *stream, size_t off, const void *src,
     /* obtain contiguous bytes from the receive buffer */
     ptls_iovec_t input = quicly_streambuf_ingress_get(stream);
 
-    u_int16_t id = ntohs(*(u_int16_t *)input.base);
-    ctx->_metrics->receive(ctx->_in_flight[id].send_time, 0, ctx->_in_flight.size());
-    ctx->_in_flight.erase(id);
-    ctx->_free_id_list.push_back(id);
+    quicly_stream_id_t id = stream->stream_id;
+    ctx->_metrics->receive(ctx->_open_streams[id].send_time, 0, ctx->_open_streams.size());
+    ctx->_open_streams.erase(id);
 
     /* remove used bytes from receive buffer */
     quicly_streambuf_ingress_shift(stream, input.len);
@@ -556,6 +555,7 @@ void TrafGen::start_quic()
                     ptls_iovec_init(NULL, 0), &handpro, NULL)) != 0) {
         throw std::runtime_error("quicly connect failed: " + std::to_string(ret));
     }
+    printf("cid\'s: %d %d %d %d\n", q_next_cid.master_id, q_next_cid.path_id, q_next_cid.thread_id, q_next_cid.node_id); 
 
     _udp_handle->on<uvw::UDPDataEvent>([this](const uvw::UDPDataEvent &event, uvw::UDPHandle &h) {
         q_process_msg(q_conn, (const uint8_t*)event.data.get(), &event.sender, event.length);
@@ -666,10 +666,8 @@ void TrafGen::q_process_msg(quicly_conn_t *conn, const uint8_t *src, const uvw::
     /* split UDP datagram into multiple QUIC packets */
     while (off < dgram_len) {
         quicly_decoded_packet_t decoded;
-        if (quicly_decode_packet(&q_ctx, &decoded, src, dgram_len, &off) == SIZE_MAX) {
-            _metrics->bad_receive(_in_flight.size());
-            continue;
-        }
+        if (quicly_decode_packet(&q_ctx, &decoded, src, dgram_len, &off) == SIZE_MAX)
+            break;
         /* TODO match incoming packets to connections, handle version negotiation, rebinding, retry, etc. */
 
         int ret;

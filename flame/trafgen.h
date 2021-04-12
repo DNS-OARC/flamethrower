@@ -22,6 +22,7 @@
 #ifdef QUIC_ENABLE
 #include "quicly.h"
 #include "quicly/streambuf.h"
+#include "quicly/constants.h"
 #endif
 
 #include <uvw.hpp>
@@ -97,6 +98,10 @@ class TrafGen
     std::unordered_map<uint16_t, Query> _in_flight;
     // a randomized list of query ids that are not currently in flight
     std::vector<uint16_t> _free_id_list;
+
+#ifdef QUIC_ENABLE
+    std::unordered_map<quicly_stream_id_t, Query> _open_streams;
+#endif
 
     bool _stopping;
 
