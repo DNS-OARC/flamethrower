@@ -104,7 +104,11 @@ void MetricsMgr::flush_to_disk()
     j["runtime_s"] = _runtime_s;
     j["run_id"] = _run_id;
     for (auto i : _response_codes) {
-        j["total_responses"][ldns_lookup_by_id(ldns_rcodes, i.first)->name] = i.second;
+        ldns_lookup_table* msg = ldns_lookup_by_id(ldns_rcodes, i.first);
+        if (msg)
+            j["total_responses"][msg->name] = i.second;
+        else
+            j["total_responses"]["Unknown rcode (" + std::to_string(i.second) + ")"] = i.second;
     }
     _metric_file << j << std::endl;
 }
@@ -132,7 +136,11 @@ void MetricsMgr::display_final_text()
     if (_response_codes.size()) {
         std::cout << "responses   :" << std::endl;
         for (auto i : _response_codes) {
-            std::cout << "  " << ldns_lookup_by_id(ldns_rcodes, i.first)->name << ": " << i.second << std::endl;
+            ldns_lookup_table* msg = ldns_lookup_by_id(ldns_rcodes, i.first);
+            if (msg)
+                std::cout << "  " << msg->name << ": " << i.second << std::endl;
+            else
+                std::cout << "  Unknown rcode (" << std::to_string(i.first) << "): " << i.second << std::endl;
         }
     }
 }
@@ -265,7 +273,11 @@ void MetricsMgr::aggregate_trafgen(const Metrics *m)
         j["period_tcp_connections"] = m->_period_tcp_connections;
         j["pkt_size_avg"] = m->_period_pkt_size_avg;
         for (auto i : m->_response_codes) {
-            j["responses"][ldns_lookup_by_id(ldns_rcodes, i.first)->name] = i.second;
+            ldns_lookup_table* msg = ldns_lookup_by_id(ldns_rcodes, i.first);
+            if (msg)
+                j["responses"][msg->name] = i.second;
+            else
+                j["responses"]["Unknown rcode (" + std::to_string(i.second) + ")"] = i.second;
         }
         _metric_file << j << std::endl;
     }

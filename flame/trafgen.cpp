@@ -13,7 +13,6 @@
 #include <picotls.h>
 #include <picotls/openssl.h>
 #include <quicly/defaults.h>
-static quicly_cid_plaintext_t q_next_cid;
 #endif
 
 TrafGen::TrafGen(std::shared_ptr<uvw::Loop> l,
@@ -463,8 +462,10 @@ void TrafGen::q_on_receive(quicly_stream_t *stream, size_t off, const void *src,
     ptls_iovec_t input = quicly_streambuf_ingress_get(stream);
 
     quicly_stream_id_t id = stream->stream_id;
-    ctx->_metrics->receive(ctx->_open_streams[id].send_time, 0, ctx->_open_streams.size());
+    uint8_t rcode = input.base[3] & 0xf; //dns response code
+    ctx->_metrics->receive(ctx->_open_streams[id].send_time, rcode, ctx->_open_streams.size());
     ctx->_open_streams.erase(id);
+
 
     /* remove used bytes from receive buffer */
     quicly_streambuf_ingress_shift(stream, input.len);
@@ -548,6 +549,7 @@ void TrafGen::start_quic()
     handpro.client.negotiated_protocols.count = 1;
 
     sockaddr* sa_ptr = (sockaddr*)&sa;
+    quicly_cid_plaintext_t q_next_cid;
     sa.ss_family = _traf_config->family;
     inet_pton(sa.ss_family, addr.data(), sa_ptr->sa_data);
     if ((ret = quicly_connect(&q_conn, &q_ctx, addr.data(),
