@@ -596,11 +596,17 @@ void TrafGen::start()
         start_tcp_session();
     }
 
-    _timeout_timer = _loop->resource<uvw::TimerHandle>();
-    _timeout_timer->on<uvw::TimerEvent>([this](const uvw::TimerEvent &event, uvw::TimerHandle &h) {
+#ifdef QUIC_ENABLE
+    if (_traf_config->protocol != Protocol::QUIC) {
+#endif
+        _timeout_timer = _loop->resource<uvw::TimerHandle>();
+        _timeout_timer->on<uvw::TimerEvent>([this](const uvw::TimerEvent &event, uvw::TimerHandle &h) {
         handle_timeouts();
     });
-    _timeout_timer->start(uvw::TimerHandle::Time{_traf_config->r_timeout * 1000}, uvw::TimerHandle::Time{1000});
+        _timeout_timer->start(uvw::TimerHandle::Time{_traf_config->r_timeout * 1000}, uvw::TimerHandle::Time{1000});
+#ifdef QUIC_ENABLE
+    }
+#endif
 
     _shutdown_timer = _loop->resource<uvw::TimerHandle>();
     if (_traf_config->protocol == Protocol::UDP) {
@@ -623,9 +629,7 @@ void TrafGen::start()
                 quicly_close(q_conn, 0, "");
                 send_pending(q_conn); //gracefully stop & free the quic connection
                 _udp_handle->stop();
-                _timeout_timer->stop();
                 _udp_handle->close();
-                _timeout_timer->close();
                 _shutdown_timer->close();
                 this->handle_timeouts();
                 });
