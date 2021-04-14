@@ -603,30 +603,47 @@ void TrafGen::start()
     _timeout_timer->start(uvw::TimerHandle::Time{_traf_config->r_timeout * 1000}, uvw::TimerHandle::Time{1000});
 
     _shutdown_timer = _loop->resource<uvw::TimerHandle>();
+    if (_traf_config->protocol == Protocol::UDP) {
+        _shutdown_timer->on<uvw::TimerEvent>([this](auto &, auto &) {
+                _udp_handle->stop();
+                _timeout_timer->stop();
+                _udp_handle->close();
+                if (_sender_timer.get()) {
+                _sender_timer->close();
+                }
+                _timeout_timer->close();
+                _shutdown_timer->close();
+
+                this->handle_timeouts();
+                });
+    }
+#ifdef QUIC_ENABLE
+    else if (_traf_config->protocol == Protocol::QUIC) {
+        _shutdown_timer->on<uvw::TimerEvent>([this](auto &, auto &) {
+                quicly_close(q_conn, 0, "");
+                send_pending(q_conn); //gracefully stop & free the quic connection
+                _udp_handle->stop();
+                _timeout_timer->stop();
+                _udp_handle->close();
+                _timeout_timer->close();
+                _shutdown_timer->close();
+                this->handle_timeouts();
+                });
+    }
+#endif
+    else {
     _shutdown_timer->on<uvw::TimerEvent>([this](auto &, auto &) {
-        if (_udp_handle.get()) {
-            _udp_handle->stop();
-        }
-        if (_tcp_handle.get()) {
             _tcp_handle->stop();
-        }
-
-        _timeout_timer->stop();
-
-        if (_udp_handle.get()) {
-            _udp_handle->close();
-        }
-        if (_tcp_handle.get()) {
+            _timeout_timer->stop();
             _tcp_handle->close();
-        }
-        if (_sender_timer.get()) {
+            if (_sender_timer.get()) {
             _sender_timer->close();
-        }
-        _timeout_timer->close();
-        _shutdown_timer->close();
-
-        this->handle_timeouts();
-    });
+            }
+            _timeout_timer->close();
+            _shutdown_timer->close();
+            this->handle_timeouts();
+            });
+    }
 }
 
 /**
@@ -657,7 +674,9 @@ void TrafGen::stop()
     if (_sender_timer.get()) {
         _sender_timer->stop();
     }
-    long shutdown_length = (_in_flight.size()) ? (_traf_config->r_timeout * 1000) : 1;
+
+    long shutdown_length = (_in_flight.size()||_open_streams.size())
+        ? (_traf_config->r_timeout * 1000) : 1;
     _shutdown_timer->start(uvw::TimerHandle::Time{shutdown_length}, uvw::TimerHandle::Time{0});
 
 }
