@@ -458,17 +458,20 @@ void TrafGen::q_on_receive(quicly_stream_t *stream, size_t off, const void *src,
     if (quicly_streambuf_ingress_receive(stream, off, src, len) != 0)
         return ;
 
-    /* obtain contiguous bytes from the receive buffer */
-    ptls_iovec_t input = quicly_streambuf_ingress_get(stream);
+    if (quicly_recvstate_transfer_complete(&stream->recvstate)) {
+        /* obtain contiguous bytes from the receive buffer */
+        ptls_iovec_t input = quicly_streambuf_ingress_get(stream);
 
-    quicly_stream_id_t id = stream->stream_id;
-    uint8_t rcode = input.base[3] & 0xf; //dns response code
-    ctx->_metrics->receive(ctx->_open_streams[id].send_time, rcode, ctx->_open_streams.size());
-    ctx->_open_streams.erase(id);
+        quicly_stream_id_t id = stream->stream_id;
+        uint8_t rcode = input.base[3] & 0xf; //dns response code
+
+        ctx->_metrics->receive(ctx->_open_streams[id].send_time, rcode, ctx->_open_streams.size());
+        ctx->_open_streams.erase(id);
 
 
-    /* remove used bytes from receive buffer */
-    quicly_streambuf_ingress_shift(stream, input.len);
+        /* remove used bytes from receive buffer */
+        quicly_streambuf_ingress_shift(stream, input.len);
+    }
 }
 
 int TrafGen::q_on_stream_open(quicly_stream_open_t *self, quicly_stream_t *stream)
