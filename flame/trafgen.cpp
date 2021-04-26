@@ -271,7 +271,7 @@ void TrafGen::start_wait_timer_for_tcp_finish()
         _finish_session_timer->close();
         _tcp_handle->close();
     });
-    _finish_session_timer->start(uvw::TimerHandle::Time{1}, uvw::TimerHandle::Time{50});
+    _finish_session_timer->start(uvw::TimerHandle::Time{1}, uvw::TimerHandle::Time{_traf_config->s_delay});
 }
 
 void TrafGen::udp_send()
