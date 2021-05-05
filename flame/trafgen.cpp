@@ -32,17 +32,21 @@ TrafGen::TrafGen(std::shared_ptr<uvw::Loop> l,
     // build a list of random ids we will use for queries
     std::random_device rd;
     std::mt19937 g(rd());
-    if (_traf_config->protocol != Protocol::QUIC) {
+
+#ifdef QUIC_ENABLE
+    if (_traf_config->protocol == Protocol::QUIC) {
+        // same max as below, to mimic the behavior of the other protocols,
+        // even if the streams_id use an uint64_t
+        _open_streams.reserve(std::numeric_limits<uint16_t>::max());
+    } else
+#endif
+    {
         for (uint16_t i = 0; i < std::numeric_limits<uint16_t>::max(); i++)
             _free_id_list.push_back(i);
         std::shuffle(_free_id_list.begin(), _free_id_list.end(), g);
         // allocate enough space for the amount of queries we expect to have in flight
         // max here is based on uint16, the number of ids
         _in_flight.reserve(std::numeric_limits<uint16_t>::max());
-    } else {
-        // same max as above, to mimic the behavior of the other protocols,
-        // even if the streams_id use an uint64_t
-        _open_streams.reserve(std::numeric_limits<uint16_t>::max());
     }
 }
 
@@ -692,8 +696,12 @@ void TrafGen::stop()
         _sender_timer->stop();
     }
 
+#ifdef QUIC_ENABLE
     long shutdown_length = (_in_flight.size()||_open_streams.size())
         ? (_traf_config->r_timeout * 1000) : 1;
+#else
+    long shutdown_length = (_in_flight.size()) ? (_traf_config->r_timeout * 1000) : 1;
+#endif
     _shutdown_timer->start(uvw::TimerHandle::Time{shutdown_length}, uvw::TimerHandle::Time{0});
 
 }
