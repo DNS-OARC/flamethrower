@@ -635,7 +635,7 @@ void TrafGen::start()
     else if (_traf_config->protocol == Protocol::QUIC) {
         _shutdown_timer->on<uvw::TimerEvent>([this](auto &, auto &) {
                 quicly_close(q_conn, 0, "");
-                send_pending(q_conn); //gracefully stop & free the quic connection
+                this->send_pending(q_conn); //gracefully stop & free the quic connection
                 if (_udp_handle.get()) {
                     _udp_handle->stop();
                     _udp_handle->close();
@@ -729,7 +729,7 @@ void TrafGen::q_process_msg(quicly_conn_t *conn, const uint8_t *src, const uvw::
         }
         ret = quicly_receive(conn, NULL, &sa, &decoded);
 
-        send_pending(conn);
+        this->send_pending(conn);
         if (ret != 0 && ret != QUICLY_ERROR_PACKET_IGNORED) {
             return;
         }
