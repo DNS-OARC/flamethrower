@@ -320,9 +320,9 @@ int TrafGen::send_pending(quicly_conn_t *conn)
                         }
                     } break;
             case QUICLY_ERROR_FREE_CONNECTION:
-                    /* connection has been closed, free, and exit when running as a client */
+                    // connection is closed & free
                     quicly_free(conn);
-                    q_conn = NULL;
+                    conn = NULL;
                     return ret;
             default:
                     std::cerr << "quicly_send returned" << std::endl;
@@ -368,37 +368,7 @@ void TrafGen::quic_send()
         _open_streams[id].send_time = std::chrono::high_resolution_clock::now();
     }
 
-    quicly_address_t dest, src;
-    struct iovec dgrams[16];
-    size_t num_dgrams = sizeof(dgrams) / sizeof(dgrams[0]);
-    uint8_t dgrams_buf[num_dgrams * q_ctx.transport_params.max_udp_payload_size];
-    int ret = quicly_send(q_conn, &dest, &src, dgrams, &num_dgrams, dgrams_buf, sizeof(dgrams_buf));
-    switch (ret) {
-        case 0: {
-            size_t i;
-            for (i = 0; i != num_dgrams; ++i) {
-                // XXX libuv needs to own this since it frees async
-                char *data = (char*)std::malloc(dgrams[i].iov_len);
-                memcpy(data, dgrams[i].iov_base, dgrams[i].iov_len);
-                if (data == nullptr) {
-                    throw std::runtime_error("unable to allocate datagram memory");
-                }
-                if (_traf_config->family == AF_INET) {
-                    _udp_handle->send<uvw::IPv4>(_traf_config->next_target().address, _traf_config->port, data, dgrams[i].iov_len);
-                } else {
-                    _udp_handle->send<uvw::IPv6>(_traf_config->next_target().address, _traf_config->port, data, dgrams[i].iov_len);
-                }
-            }
-        } break;
-        case QUICLY_ERROR_FREE_CONNECTION:
-            /* connection has been closed, free, and exit when running as a client */
-            quicly_free(q_conn);
-            q_conn = NULL;
-            return;
-        default:
-            std::cerr << "quicly_send returned" << std::endl;
-            return;
-    }
+    send_pending(q_conn);
 
 }
 #endif
