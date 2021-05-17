@@ -322,7 +322,7 @@ int TrafGen::send_pending(quicly_conn_t *conn)
             case QUICLY_ERROR_FREE_CONNECTION:
                     // connection is closed & free
                     quicly_free(conn);
-                    conn = NULL;
+                    conn = nullptr;
                     return ret;
             default:
                     std::cerr << "quicly_send returned" << std::endl;
@@ -340,13 +340,13 @@ void TrafGen::quic_send()
     if (_qgen->finished())
         return;
     int ret;
-    if (q_conn != NULL) {
+    if (q_conn != nullptr) {
         quicly_close(q_conn, 0, "");
         send_pending(q_conn);
     }
     if ((ret = quicly_connect(&q_conn, &q_ctx, target_name.data(),
-                    (struct sockaddr*)&target_addr, NULL, &q_next_cid,
-                    ptls_iovec_init(NULL, 0), &q_hand_prop, NULL)) != 0) {
+                    (struct sockaddr*)&target_addr, nullptr, &q_next_cid,
+                    ptls_iovec_init(nullptr, 0), &q_hand_prop, nullptr)) != 0) {
         throw std::runtime_error("quicly connect failed: " + std::to_string(ret));
     }
     ++q_next_cid.master_id;
@@ -700,7 +700,7 @@ void TrafGen::q_process_msg(quicly_conn_t *conn, const uint8_t *src, const uvw::
         } else {
             uv_ip6_addr(src_addr->ip.data(), src_addr->port, (sockaddr_in6 *) &sa);
         }
-        ret = quicly_receive(conn, NULL, &sa, &decoded);
+        ret = quicly_receive(conn, nullptr, &sa, &decoded);
 
         this->send_pending(conn);
         if (ret != 0 && ret != QUICLY_ERROR_PACKET_IGNORED) {
