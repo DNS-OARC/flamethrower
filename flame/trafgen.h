@@ -106,7 +106,14 @@ class TrafGen
     bool _stopping;
 
 #ifdef QUIC_ENABLE
-    quicly_conn_t *q_conn;
+    struct sockaddr_storage target_addr;
+    std::string target_name;
+    //tells the negotiated protocol
+    ptls_iovec_t alpn = ptls_iovec_init("doq", 3);
+    quicly_conn_t *q_conn = NULL;
+    //stores the cid for the next connection
+    quicly_cid_plaintext_t q_next_cid = {0, 0, 0, 0};;
+    ptls_handshake_properties_t q_hand_prop;
     custom_quicly_stream_open_t q_stream_open;
     quicly_closed_by_remote_t q_closed_by_remote;
     quicly_context_t q_ctx;

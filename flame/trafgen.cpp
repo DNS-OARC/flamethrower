@@ -339,6 +339,19 @@ void TrafGen::quic_send()
         return;
     if (_qgen->finished())
         return;
+    int ret;
+    if (q_conn != NULL) {
+        quicly_close(q_conn, 0, "");
+        send_pending(q_conn);
+    }
+    if ((ret = quicly_connect(&q_conn, &q_ctx, target_name.data(),
+                    (struct sockaddr*)&target_addr, NULL, &q_next_cid,
+                    ptls_iovec_init(NULL, 0), &q_hand_prop, NULL)) != 0) {
+        throw std::runtime_error("quicly connect failed: " + std::to_string(ret));
+    }
+    ++q_next_cid.master_id;
+
+    printf("cid\'s: %d %d %d %d\n", q_next_cid.master_id, q_next_cid.path_id, q_next_cid.thread_id, q_next_cid.node_id); 
 
     quicly_stream_id_t id{0};
     for (int i = 0; i < _traf_config->batch_count; i++) {
@@ -518,23 +531,13 @@ void TrafGen::start_quic()
     _metrics->trafgen_id(_udp_handle->sock().port);
 
     int ret;
-    auto addr = _traf_config->next_target().address;
-    struct sockaddr_storage sa;
-    ptls_handshake_properties_t handpro = {0};
-    ptls_iovec_t alpn = ptls_iovec_init("doq", 3);
-    handpro.client.negotiated_protocols.list = &alpn;
-    handpro.client.negotiated_protocols.count = 1;
+    target_name = _traf_config->next_target().address;
+    q_hand_prop = {0};
+    q_hand_prop.client.negotiated_protocols.list = &alpn;
+    q_hand_prop.client.negotiated_protocols.count = 1;
 
-    sockaddr* sa_ptr = (sockaddr*)&sa;
-    quicly_cid_plaintext_t q_next_cid;
-    sa.ss_family = _traf_config->family;
-    inet_pton(sa.ss_family, addr.data(), sa_ptr->sa_data);
-    if ((ret = quicly_connect(&q_conn, &q_ctx, addr.data(),
-                    (struct sockaddr*)&sa, NULL, &q_next_cid,
-                    ptls_iovec_init(NULL, 0), &handpro, NULL)) != 0) {
-        throw std::runtime_error("quicly connect failed: " + std::to_string(ret));
-    }
-    printf("cid\'s: %d %d %d %d\n", q_next_cid.master_id, q_next_cid.path_id, q_next_cid.thread_id, q_next_cid.node_id); 
+    target_addr.ss_family = _traf_config->family;
+    inet_pton(target_addr.ss_family, target_name.data(), ((sockaddr*)&target_addr)->sa_data);
 
     _udp_handle->on<uvw::UDPDataEvent>([this](const uvw::UDPDataEvent &event, uvw::UDPHandle &h) {
         q_process_msg(q_conn, (const uint8_t*)event.data.get(), &event.sender, event.length);
