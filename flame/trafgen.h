@@ -128,7 +128,7 @@ class TrafGen
     void udp_send();
 
     void start_tcp_session();
-    void start_wait_timer_for_tcp_finish();
+    void start_wait_timer_for_session_finish();
 
 #ifdef QUIC_ENABLE
     int send_pending(quicly_conn_t *conn);

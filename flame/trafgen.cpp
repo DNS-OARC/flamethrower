@@ -240,7 +240,7 @@ void TrafGen::start_tcp_session()
     // OUTGOING: write operation has finished
     _tcp_handle->on<uvw::WriteEvent>([this](uvw::WriteEvent &event, uvw::TcpHandle &h) {
         if (!_finish_session_timer)
-            start_wait_timer_for_tcp_finish();
+            start_wait_timer_for_session_finish();
     });
 
     // SOCKET: on connect
@@ -260,7 +260,7 @@ void TrafGen::start_tcp_session()
     }
 }
 
-void TrafGen::start_wait_timer_for_tcp_finish()
+void TrafGen::start_wait_timer_for_session_finish()
 {
 
     // wait for all responses, but no longer than query timeout
@@ -273,7 +273,7 @@ void TrafGen::start_wait_timer_for_tcp_finish()
         auto now = std::chrono::high_resolution_clock::now();
         auto cur_wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - wait_time_start).count();
 
-        if (_in_flight.size() && (cur_wait_ms < (_traf_config->r_timeout * 1000))) {
+        if ((_in_flight.size() || _open_streams.size()) && (cur_wait_ms < (_traf_config->r_timeout * 1000))) {
             // queries in flight and timeout time not elapsed, still wait
             return;
         } else if (cur_wait_ms < (_traf_config->s_delay)) {
@@ -285,7 +285,15 @@ void TrafGen::start_wait_timer_for_tcp_finish()
         // shut down timer and connection. TCP CloseEvent will handle restarting sends.
         _finish_session_timer->stop();
         _finish_session_timer->close();
-        _tcp_handle->close();
+
+#ifdef QUIC_ENABLE
+        if (_traf_config->protocol == Protocol::QUIC) {
+            quicly_close(q_conn, 0, "");
+            send_pending(q_conn);
+            quic_send();
+        } else
+#endif
+            _tcp_handle->close();
     });
     _finish_session_timer->start(uvw::TimerHandle::Time{1}, uvw::TimerHandle::Time{50});
 }
@@ -344,6 +352,8 @@ void TrafGen::quic_send()
         quicly_close(q_conn, 0, "");
         send_pending(q_conn);
     }
+    _finish_session_timer.reset();
+
     if ((ret = quicly_connect(&q_conn, &q_ctx, target_name.data(),
                     (struct sockaddr*)&target_addr, nullptr, &q_next_cid,
                     ptls_iovec_init(nullptr, 0), &q_hand_prop, nullptr)) != 0) {
@@ -382,6 +392,7 @@ void TrafGen::quic_send()
     }
 
     send_pending(q_conn);
+    start_wait_timer_for_session_finish();
 
 }
 #endif
@@ -562,11 +573,7 @@ void TrafGen::start()
 #ifdef QUIC_ENABLE
     else if (_traf_config->protocol == Protocol::QUIC) {
         start_quic();
-        _sender_timer = _loop->resource<uvw::TimerHandle>();
-        _sender_timer->on<uvw::TimerEvent>([this](const uvw::TimerEvent &event, uvw::TimerHandle &h) {
             quic_send();
-        });
-        _sender_timer->start(uvw::TimerHandle::Time{1}, uvw::TimerHandle::Time{_traf_config->s_delay});
     }
 #endif
     else {
