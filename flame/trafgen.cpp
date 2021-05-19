@@ -293,7 +293,9 @@ void TrafGen::start_wait_timer_for_session_finish()
                 quic_send();
         } else
 #endif
+        {
             _tcp_handle->close();
+        }
     });
     _finish_session_timer->start(uvw::TimerHandle::Time{1}, uvw::TimerHandle::Time{50});
 }
@@ -620,6 +622,7 @@ void TrafGen::start()
                     quicly_close(q_conn, 0, "");
                     this->send_pending(q_conn); //gracefully stop & free the quic connection
                 }
+                _timeout_timer->stop();
                 if (_udp_handle.get()) {
                     _udp_handle->stop();
                     _udp_handle->close();
@@ -638,9 +641,6 @@ void TrafGen::start()
             _timeout_timer->stop();
             if (_tcp_handle.get()) {
                 _tcp_handle->close();
-            }
-            if (_sender_timer.get()) {
-                _sender_timer->close();
             }
             _timeout_timer->close();
             _shutdown_timer->close();
