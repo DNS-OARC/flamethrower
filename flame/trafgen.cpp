@@ -290,7 +290,8 @@ void TrafGen::start_wait_timer_for_session_finish()
         if (_traf_config->protocol == Protocol::QUIC) {
             quicly_close(q_conn, 0, "");
             send_pending(q_conn);
-            quic_send();
+            if (!_stopping)
+                quic_send();
         } else
 #endif
             _tcp_handle->close();
@@ -360,8 +361,6 @@ void TrafGen::quic_send()
         throw std::runtime_error("quicly connect failed: " + std::to_string(ret));
     }
     ++q_next_cid.master_id;
-
-    printf("cid\'s: %d %d %d %d\n", q_next_cid.master_id, q_next_cid.path_id, q_next_cid.thread_id, q_next_cid.node_id); 
 
     quicly_stream_id_t id{0};
     for (int i = 0; i < _traf_config->batch_count; i++) {
@@ -435,14 +434,21 @@ void TrafGen::udp_send()
 }
 
 #ifdef QUIC_ENABLE
+/*
+ * This event can be ignored, since only one query is sent per stream.
+ */
 static void q_on_stop_sending(quicly_stream_t *stream, int err)
 {
     std::cerr << "QUIC received STOP_SENDING: " << PRIu16 << "\n" << QUICLY_ERROR_GET_ERROR_CODE(err) << std::endl;
     quicly_close(stream->conn, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0), "");
 }
 
-static void q_on_receive_reset(quicly_stream_t *stream, int err)
+void TrafGen::q_on_receive_reset(quicly_stream_t *stream, int err)
 {
+    custom_quicly_streambuf_t *sbuf = (custom_quicly_streambuf_t *) stream->data;
+    TrafGen *ctx = (TrafGen *) sbuf->user_ctx;
+    ctx->_metrics->bad_receive(ctx->_open_streams.size());
+    ctx->_open_streams.erase(stream->stream_id);
     std::cerr << "QUIC received RESET_STREAM: " << PRIu16 << "\n" << QUICLY_ERROR_GET_ERROR_CODE(err) << std::endl;
     quicly_close(stream->conn, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0), "");
 }
@@ -489,7 +495,7 @@ int TrafGen::q_on_stream_open(quicly_stream_open_t *self, quicly_stream_t *strea
     return 0;
 }
 
-static void q_on_closed_by_remote(quicly_closed_by_remote_t *self, quicly_conn_t *conn, int err, uint64_t frame_type,
+void TrafGen::q_on_closed_by_remote(quicly_closed_by_remote_t *self, quicly_conn_t *conn, int err, uint64_t frame_type,
                                 const char *reason, size_t reason_len)
 {
     if (QUICLY_ERROR_IS_QUIC_TRANSPORT(err)) {
@@ -505,6 +511,10 @@ static void q_on_closed_by_remote(quicly_closed_by_remote_t *self, quicly_conn_t
     } else {
         fprintf(stderr, "unexpected close:code=%d\n", err);
     }
+    custom_quicly_closed_by_remote_t *self_ptr = (custom_quicly_closed_by_remote_t *) self;
+    TrafGen *ctx = (TrafGen *) self_ptr->user_ctx;
+
+    ctx->handle_timeouts(true);
 }
 
 void TrafGen::start_quic()
@@ -518,12 +528,12 @@ void TrafGen::start_quic()
         .cipher_suites = ptls_openssl_cipher_suites,
     };
     q_stream_open = {{q_on_stream_open}, this};
-    q_closed_by_remote = {q_on_closed_by_remote};
+    q_closed_by_remote = {{q_on_closed_by_remote}, this};
     q_ctx = quicly_spec_context;
     q_ctx.tls = &q_tlsctx;
     quicly_amend_ptls_context(q_ctx.tls);
     q_ctx.stream_open = (quicly_stream_open_t *) &q_stream_open;
-    q_ctx.closed_by_remote = &q_closed_by_remote;
+    q_ctx.closed_by_remote =(quicly_closed_by_remote_t *) &q_closed_by_remote;
 
     _udp_handle = _loop->resource<uvw::UDPHandle>(_traf_config->family);
 
@@ -541,7 +551,6 @@ void TrafGen::start_quic()
 
     _metrics->trafgen_id(_udp_handle->sock().port);
 
-    int ret;
     target_name = _traf_config->next_target().address;
     q_hand_prop = {0};
     q_hand_prop.client.negotiated_protocols.list = &alpn;
@@ -573,24 +582,18 @@ void TrafGen::start()
 #ifdef QUIC_ENABLE
     else if (_traf_config->protocol == Protocol::QUIC) {
         start_quic();
-            quic_send();
+        quic_send();
     }
 #endif
     else {
         start_tcp_session();
     }
 
-#ifdef QUIC_ENABLE
-    if (_traf_config->protocol != Protocol::QUIC) {
-#endif
         _timeout_timer = _loop->resource<uvw::TimerHandle>();
         _timeout_timer->on<uvw::TimerEvent>([this](const uvw::TimerEvent &event, uvw::TimerHandle &h) {
         handle_timeouts();
     });
         _timeout_timer->start(uvw::TimerHandle::Time{_traf_config->r_timeout * 1000}, uvw::TimerHandle::Time{1000});
-#ifdef QUIC_ENABLE
-    }
-#endif
 
     _shutdown_timer = _loop->resource<uvw::TimerHandle>();
     if (_traf_config->protocol == Protocol::UDP) {
@@ -620,9 +623,7 @@ void TrafGen::start()
                     _udp_handle->stop();
                     _udp_handle->close();
                 }
-                if (_sender_timer.get()) {
-                    _sender_timer->close();
-                }
+                _timeout_timer->close();
                 _shutdown_timer->close();
                 this->handle_timeouts();
                 });
@@ -657,15 +658,29 @@ void TrafGen::handle_timeouts(bool force_reset)
 
     std::vector<uint16_t> timed_out;
     auto now = std::chrono::high_resolution_clock::now();
-    for (auto i : _in_flight) {
-        if (force_reset || std::chrono::duration_cast<std::chrono::seconds>(now - i.second.send_time).count() >= _traf_config->r_timeout) {
-            timed_out.push_back(i.first);
+    if (_traf_config->protocol != Protocol::QUIC) {
+        std::vector<uint16_t> timed_out;
+        for (auto i : _in_flight) {
+            if (force_reset || std::chrono::duration_cast<std::chrono::seconds>(now - i.second.send_time).count() >= _traf_config->r_timeout) {
+                timed_out.push_back(i.first);
+            }
         }
-    }
-    for (auto i : timed_out) {
-        _in_flight.erase(i);
-        _metrics->timeout(_in_flight.size());
-        _free_id_list.push_back(i);
+        for (auto i : timed_out) {
+            _in_flight.erase(i);
+            _metrics->timeout(_in_flight.size());
+            _free_id_list.push_back(i);
+        }
+    } else {
+        std::vector<quicly_stream_id_t> timed_out;
+        for (auto i : _open_streams) {
+            if (force_reset || std::chrono::duration_cast<std::chrono::seconds>(now - i.second.send_time).count() >= _traf_config->r_timeout) {
+                timed_out.push_back(i.first);
+            }
+        }
+        for (auto i : timed_out) {
+            _open_streams.erase(i);
+            _metrics->timeout(_open_streams.size());
+        }
     }
 }
 

@@ -50,6 +50,11 @@ typedef struct {
     quicly_streambuf_t sb;
     void *user_ctx;
 } custom_quicly_streambuf_t;
+
+typedef struct {
+    quicly_closed_by_remote_t closed_by;
+    void *user_ctx;
+} custom_quicly_closed_by_remote_t;
 #endif
 
 struct TrafGenConfig {
@@ -112,10 +117,10 @@ class TrafGen
     ptls_iovec_t alpn = ptls_iovec_init("doq", 3);
     quicly_conn_t *q_conn = NULL;
     //stores the cid for the next connection
-    quicly_cid_plaintext_t q_next_cid = {0, 0, 0, 0};;
+    quicly_cid_plaintext_t q_next_cid = {0, 0, 0, 0};
     ptls_handshake_properties_t q_hand_prop;
     custom_quicly_stream_open_t q_stream_open;
-    quicly_closed_by_remote_t q_closed_by_remote;
+    custom_quicly_closed_by_remote_t q_closed_by_remote;
     quicly_context_t q_ctx;
     ptls_context_t q_tlsctx;
 #endif
@@ -135,8 +140,10 @@ class TrafGen
     void start_quic();
     void quic_send();
     void q_process_msg(quicly_conn_t *conn, const uint8_t *src, const uvw::Addr *src_addr, size_t dgram_len);
+    static void q_on_receive_reset(quicly_stream_t *stream, int err);
     static void q_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len);
     static int q_on_stream_open(quicly_stream_open_t *self, quicly_stream_t *stream);
+    static void q_on_closed_by_remote(quicly_closed_by_remote_t *self, quicly_conn_t *conn, int err, uint64_t frame_type, const char *reason, size_t reason_len);
 #endif
 
 public:
