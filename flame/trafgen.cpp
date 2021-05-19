@@ -167,17 +167,16 @@ void TrafGen::start_tcp_session()
         }
 
 #ifdef DOH_ENABLE
-        if(_traf_config->protocol != Protocol::DOH) {
+        if(_traf_config->protocol != Protocol::DOH)
 #endif
+        {
             auto qt = _qgen->next_tcp(id_list);
 
             // async send the batch. fires WriteEvent when finished sending.
             _tcp_session->write(std::move(std::get<0>(qt)), std::get<1>(qt));
 
             _metrics->send(std::get<1>(qt), id_list.size(), _in_flight.size());
-#ifdef DOH_ENABLE
         }
-#endif
     };
 
     // For now, treat a TLS handshake failure as malformed data
@@ -273,7 +272,7 @@ void TrafGen::start_wait_timer_for_session_finish()
         auto now = std::chrono::high_resolution_clock::now();
         auto cur_wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - wait_time_start).count();
 
-        if ((_in_flight.size() || _open_streams.size()) && (cur_wait_ms < (_traf_config->r_timeout * 1000))) {
+        if (this->in_flight() && (cur_wait_ms < (_traf_config->r_timeout * 1000))) {
             // queries in flight and timeout time not elapsed, still wait
             return;
         } else if (cur_wait_ms < (_traf_config->s_delay)) {
@@ -658,9 +657,22 @@ void TrafGen::start()
 void TrafGen::handle_timeouts(bool force_reset)
 {
 
-    std::vector<uint16_t> timed_out;
     auto now = std::chrono::high_resolution_clock::now();
-    if (_traf_config->protocol != Protocol::QUIC) {
+#ifdef QUIC_ENABLE
+    if (_traf_config->protocol == Protocol::QUIC) {
+        std::vector<quicly_stream_id_t> timed_out;
+        for (auto i : _open_streams) {
+            if (force_reset || std::chrono::duration_cast<std::chrono::seconds>(now - i.second.send_time).count() >= _traf_config->r_timeout) {
+                timed_out.push_back(i.first);
+            }
+        }
+        for (auto i : timed_out) {
+            _open_streams.erase(i);
+            _metrics->timeout(_open_streams.size());
+        }
+    } else
+#endif
+    {
         std::vector<uint16_t> timed_out;
         for (auto i : _in_flight) {
             if (force_reset || std::chrono::duration_cast<std::chrono::seconds>(now - i.second.send_time).count() >= _traf_config->r_timeout) {
@@ -672,18 +684,16 @@ void TrafGen::handle_timeouts(bool force_reset)
             _metrics->timeout(_in_flight.size());
             _free_id_list.push_back(i);
         }
-    } else {
-        std::vector<quicly_stream_id_t> timed_out;
-        for (auto i : _open_streams) {
-            if (force_reset || std::chrono::duration_cast<std::chrono::seconds>(now - i.second.send_time).count() >= _traf_config->r_timeout) {
-                timed_out.push_back(i.first);
-            }
-        }
-        for (auto i : timed_out) {
-            _open_streams.erase(i);
-            _metrics->timeout(_open_streams.size());
-        }
     }
+}
+
+bool TrafGen::in_flight()
+{
+#ifdef QUIC_ENABLE
+    return _in_flight.size()||_open_streams.size();
+#else
+    return _in_flight.size();
+#endif
 }
 
 void TrafGen::stop()
@@ -693,12 +703,7 @@ void TrafGen::stop()
         _sender_timer->stop();
     }
 
-#ifdef QUIC_ENABLE
-    long shutdown_length = (_in_flight.size()||_open_streams.size())
-        ? (_traf_config->r_timeout * 1000) : 1;
-#else
-    long shutdown_length = (_in_flight.size()) ? (_traf_config->r_timeout * 1000) : 1;
-#endif
+    long shutdown_length = this->in_flight() ? (_traf_config->r_timeout * 1000) : 1;
     _shutdown_timer->start(uvw::TimerHandle::Time{shutdown_length}, uvw::TimerHandle::Time{0});
 
 }

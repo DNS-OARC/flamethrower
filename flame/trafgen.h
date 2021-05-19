@@ -135,6 +135,8 @@ class TrafGen
     void start_tcp_session();
     void start_wait_timer_for_session_finish();
 
+    bool in_flight();
+
 #ifdef QUIC_ENABLE
     int send_pending(quicly_conn_t *conn);
     void start_quic();
