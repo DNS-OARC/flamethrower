@@ -617,8 +617,10 @@ void TrafGen::start()
 #ifdef QUIC_ENABLE
     else if (_traf_config->protocol == Protocol::QUIC) {
         _shutdown_timer->on<uvw::TimerEvent>([this](auto &, auto &) {
-                quicly_close(q_conn, 0, "");
-                this->send_pending(q_conn); //gracefully stop & free the quic connection
+                if (q_conn != nullptr) {
+                    quicly_close(q_conn, 0, "");
+                    this->send_pending(q_conn); //gracefully stop & free the quic connection
+                }
                 if (_udp_handle.get()) {
                     _udp_handle->stop();
                     _udp_handle->close();
