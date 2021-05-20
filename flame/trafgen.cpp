@@ -370,7 +370,7 @@ void TrafGen::quic_send()
             return;
         }
         if (_rate_limit && !_rate_limit->consume(1, this->_loop->now()))
-            return;
+            break;
         //in doq, all dns messages ID are set to 0
         auto qt = _qgen->next_udp(0);
 
