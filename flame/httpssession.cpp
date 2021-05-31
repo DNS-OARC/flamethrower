@@ -295,7 +295,7 @@ void HTTPSSession::receive_data(const char data[], size_t _len)
         do_handshake();
         break;
     case LinkState::DATA:
-        char buf[2048];
+        char buf[16384];
         for (;;) {
             ssize_t len = gnutls_record_recv(_gnutls_session, buf, sizeof(buf));
             if (len > 0) {
