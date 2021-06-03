@@ -41,6 +41,8 @@ add_compile_options(-Wall)
 # Find and setup all dependencies BEFORE declaring targets.
 # ::-------------------------------------------------------------------------:: 
 
+find_package(Threads REQUIRED)
+
 find_package(PkgConfig)
 
 include(sanitizer)
@@ -142,6 +144,7 @@ target_link_libraries(flame
         PRIVATE flamecore
         PRIVATE ${LIBUV_LDFLAGS}
         PRIVATE ${LIBUV_LIBRARIES}
+        PRIVATE Threads::Threads
         )
 
 add_executable(tests
