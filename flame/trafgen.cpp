@@ -287,7 +287,7 @@ void TrafGen::start_wait_timer_for_session_finish()
 
 #ifdef QUIC_ENABLE
         if (_traf_config->protocol == Protocol::QUIC) {
-            quicly_close(q_conn, 0, "");
+            quicly_close(q_conn, 0, "No Error");
             send_pending(q_conn);
             if (!_stopping)
                 quic_send();
@@ -351,7 +351,7 @@ void TrafGen::quic_send()
         return;
     int ret;
     if (q_conn != nullptr) {
-        quicly_close(q_conn, 0, "");
+        quicly_close(q_conn, 0, "No Error");
         send_pending(q_conn);
     }
     _finish_session_timer.reset();
@@ -436,22 +436,23 @@ void TrafGen::udp_send()
 
 #ifdef QUIC_ENABLE
 /*
- * This event can be ignored, since only one query is sent per stream.
+ * Because only one query is sent per stream and the query is sent at
+ * the same time the stream is opened, this should never happen.
  */
 static void q_on_stop_sending(quicly_stream_t *stream, int err)
 {
-    std::cerr << "QUIC received STOP_SENDING: " << PRIu16 << "\n" << QUICLY_ERROR_GET_ERROR_CODE(err) << std::endl;
-    quicly_close(stream->conn, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0), "");
+    std::cerr << "QUIC unexpectedly received STOP_SENDING: " << PRIu16 << QUICLY_ERROR_GET_ERROR_CODE(err) << std::endl;
 }
 
+/*
+ * Received in case of server-side sending error.
+ */
 void TrafGen::q_on_receive_reset(quicly_stream_t *stream, int err)
 {
     custom_quicly_streambuf_t *sbuf = (custom_quicly_streambuf_t *) stream->data;
     TrafGen *ctx = (TrafGen *) sbuf->user_ctx;
     ctx->_metrics->bad_receive(ctx->_open_streams.size());
     ctx->_open_streams.erase(stream->stream_id);
-    std::cerr << "QUIC received RESET_STREAM: " << PRIu16 << "\n" << QUICLY_ERROR_GET_ERROR_CODE(err) << std::endl;
-    quicly_close(stream->conn, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0), "");
 }
 
 void TrafGen::q_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
@@ -496,25 +497,41 @@ int TrafGen::q_on_stream_open(quicly_stream_open_t *self, quicly_stream_t *strea
     return 0;
 }
 
+/*
+ * By the rfc, all send queries are considered to be a SERVFAIL on connection failure
+ * (section 5.4).  We don't count those queries as such here and simply drop or timeout
+ * them, without counting them in the metrics, as they would skew said metrics to
+ * (probably) shorter delays.
+ */
 void TrafGen::q_on_closed_by_remote(quicly_closed_by_remote_t *self, quicly_conn_t *conn, int err, uint64_t frame_type,
                                 const char *reason, size_t reason_len)
 {
-    if (QUICLY_ERROR_IS_QUIC_TRANSPORT(err)) {
-        fprintf(stderr, "transport close:code=0x%" PRIx16 ";frame=%" PRIu64 ";reason=%.*s\n", QUICLY_ERROR_GET_ERROR_CODE(err),
-                frame_type, (int)reason_len, reason);
-    } else if (QUICLY_ERROR_IS_QUIC_APPLICATION(err)) {
-        fprintf(stderr, "application close:code=0x%" PRIx16 ";reason=%.*s\n", QUICLY_ERROR_GET_ERROR_CODE(err), (int)reason_len,
-                reason);
-    } else if (err == QUICLY_ERROR_RECEIVED_STATELESS_RESET) {
-        fprintf(stderr, "stateless reset\n");
-    } else if (err == QUICLY_ERROR_NO_COMPATIBLE_VERSION) {
-        fprintf(stderr, "no compatible version\n");
-    } else {
-        fprintf(stderr, "unexpected close:code=%d\n", err);
-    }
     custom_quicly_closed_by_remote_t *self_ptr = (custom_quicly_closed_by_remote_t *) self;
     TrafGen *ctx = (TrafGen *) self_ptr->user_ctx;
 
+    if (QUICLY_ERROR_IS_QUIC_TRANSPORT(err)) {
+        //if connection refused. Not counted as timeout since the
+        //connection is closed before the queries are sent.
+        if (QUICLY_ERROR_GET_ERROR_CODE(err) == 0x2) {
+            ctx->_open_streams.clear();
+            ctx->_metrics->net_error();
+            return;
+        } else {
+            std::cerr << "transport close:code=0" << PRIx16 << QUICLY_ERROR_GET_ERROR_CODE(err) <<
+               ";frame=" << PRIu64 << frame_type << ";reason=" << std::string(reason, reason_len) << std::endl;
+        }
+    } else if (QUICLY_ERROR_IS_QUIC_APPLICATION(err)) {
+        std::cerr << "application close:code=0" << PRIx16 << QUICLY_ERROR_GET_ERROR_CODE(err) <<
+            ";reason=" << std::string(reason, reason_len) << std::endl;
+    } else if (err == QUICLY_ERROR_RECEIVED_STATELESS_RESET) {
+        std::cerr << "stateless reset" << std::endl;
+    } else if (err == QUICLY_ERROR_NO_COMPATIBLE_VERSION) {
+        std::cerr << "no compatible version" << std::endl;
+    } else {
+        std::cerr << "unexpected close:code=" << PRIu16 << err << std::endl;
+    }
+
+    ctx->_metrics->net_error();
     ctx->handle_timeouts(true);
 }
 
@@ -619,7 +636,7 @@ void TrafGen::start()
     else if (_traf_config->protocol == Protocol::QUIC) {
         _shutdown_timer->on<uvw::TimerEvent>([this](auto &, auto &) {
                 if (q_conn != nullptr) {
-                    quicly_close(q_conn, 0, "");
+                    quicly_close(q_conn, 0, "No Error");
                     this->send_pending(q_conn); //gracefully stop & free the quic connection
                 }
                 _timeout_timer->stop();
