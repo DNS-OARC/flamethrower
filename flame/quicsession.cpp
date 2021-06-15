@@ -208,12 +208,6 @@ int QUICSession::q_on_stream_open(quicly_stream_open_t *self, quicly_stream_t *s
     return 0;
 }
 
-/*
- * By the rfc, all send queries are considered to be a SERVFAIL on connection failure
- * (section 5.4).  We don't count those queries as such here and simply drop or timeout
- * them, without counting them in the metrics, as they would skew said metrics to
- * (probably) shorter delays.
- */
 void QUICSession::q_on_closed_by_remote(quicly_closed_by_remote_t *self, quicly_conn_t *conn, int err, uint64_t frame_type,
                                 const char *reason, size_t reason_len)
 {
@@ -221,8 +215,6 @@ void QUICSession::q_on_closed_by_remote(quicly_closed_by_remote_t *self, quicly_
     QUICSession *ctx = (QUICSession *) self_ptr->user_ctx;
 
     if (QUICLY_ERROR_IS_QUIC_TRANSPORT(err)) {
-        //if connection refused. Not counted as timeout since the
-        //connection is closed before the queries are sent.
         if (QUICLY_ERROR_GET_ERROR_CODE(err) == 0x2) {
             ctx->_conn_refused();
             return;

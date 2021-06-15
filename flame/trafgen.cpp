@@ -306,9 +306,12 @@ void TrafGen::start_quic_session()
 
     Target current_target = _traf_config->next_target();
 
+    // By the rfc, all send queries are considered to be a SERVFAIL on connection failure (section 5.4).
     auto conn_error = [this]() {
         _metrics->net_error();
-        handle_timeouts(true);
+        for (auto i : _open_streams) {
+            _metrics->receive(_open_streams[i.first].send_time, 2, _open_streams.size());
+        }
     };
     // The pending requests are simly cleared because they are not yet sent if
     // this event occurs
@@ -317,7 +320,7 @@ void TrafGen::start_quic_session()
         _metrics->net_error();
     };
     auto stream_rst = [this](quicly_stream_id_t id) {
-        _metrics->bad_receive(_open_streams.size());
+        _metrics->receive(_open_streams[id].send_time, 2, _open_streams.size());
         _open_streams.erase(id);
     };
     auto got_dns_msg = [this](std::unique_ptr<char[]> data, size_t size, quicly_stream_id_t id) {
