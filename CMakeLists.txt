@@ -141,6 +141,8 @@ endif()
 if (QUIC_ENABLE)
     set(flamecore_src 
         ${flamecore_src}
+        flame/quicsession.cpp
+        flame/quicsession.h
         3rd/quicly/deps/picotls/lib/openssl.c
         3rd/quicly/deps/picotls/lib/pembase64.c
         3rd/quicly/deps/picotls/lib/picotls.c
