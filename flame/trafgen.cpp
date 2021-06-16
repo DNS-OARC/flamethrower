@@ -298,7 +298,7 @@ void TrafGen::start_wait_timer_for_session_finish()
 void TrafGen::start_quic_session()
 {
 
-    assert(_udp_handle.get() && !_udp_handle->active());
+    assert(_udp_handle.get());
     assert(_quic_session.get() == 0);
     if (_qgen->finished())
         return;
@@ -323,8 +323,8 @@ void TrafGen::start_quic_session()
         _metrics->receive(_open_streams[id].send_time, 2, _open_streams.size());
         _open_streams.erase(id);
     };
-    auto got_dns_msg = [this](std::unique_ptr<char[]> data, size_t size, quicly_stream_id_t id) {
-        if (size <= 12) {
+    auto got_dns_msg = [this](std::vector<char> data, quicly_stream_id_t id) {
+        if (data.size() <= 12) {
             _metrics->bad_receive(_in_flight.size());
             return;
         }

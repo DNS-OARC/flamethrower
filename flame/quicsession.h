@@ -7,7 +7,7 @@
 #include <picotls.h>
 #include <picotls/openssl.h>
 #include <quicly/defaults.h>
-#include "quicly/streambuf.h"
+#include <quicly/streambuf.h>
 
 #include "target.h"
 
@@ -31,7 +31,7 @@ public:
     using conn_refused_cb = std::function<void()>;
     using conn_error_cb = std::function<void()>;
     using stream_rst_cb = std::function<void(quicly_stream_id_t id)>;
-    using got_dns_msg_cb = std::function<void(std::unique_ptr<char[]> data, size_t size, quicly_stream_id_t id)>;
+    using got_dns_msg_cb = std::function<void(std::vector<char> data, quicly_stream_id_t id)>;
 
     QUICSession(std::shared_ptr<uvw::UDPHandle> handle,
             got_dns_msg_cb got_dns_msg_handler,
@@ -74,7 +74,7 @@ private:
 
     //tells the negotiated protocol
     ptls_iovec_t _alpn;
-    quicly_conn_t *q_conn;
+    quicly_conn_t *q_conn = nullptr;
     //stores the cid for the next connection
     quicly_cid_plaintext_t _cid;
     ptls_handshake_properties_t q_hand_prop;

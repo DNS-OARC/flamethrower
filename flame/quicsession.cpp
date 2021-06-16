@@ -115,6 +115,8 @@ void QUICSession::receive_data(const char data[], size_t len, const uvw::Addr *s
 
 void QUICSession::send_pending()
 {
+    if (!q_conn)
+        return;
     quicly_address_t dest, src;
     struct iovec packets[10];
     uint8_t buf[10 * quicly_get_context(q_conn)->transport_params.max_udp_payload_size];
@@ -183,8 +185,8 @@ void QUICSession::q_on_receive(quicly_stream_t *stream, size_t off, const void *
     if (quicly_recvstate_transfer_complete(&stream->recvstate)) {
         /* obtain contiguous bytes from the receive buffer */
         ptls_iovec_t input = quicly_streambuf_ingress_get(stream);
-        std::unique_ptr<char[]> msg((char*)input.base);
-        ctx->_got_dns_msg(std::move(msg), input.len, stream->stream_id);
+        std::vector<char> msg((char *) input.base, (char *) (input.base+input.len));
+        ctx->_got_dns_msg(msg, stream->stream_id);
 
         /* remove used bytes from receive buffer */
         quicly_streambuf_ingress_shift(stream, input.len);
@@ -195,8 +197,8 @@ int QUICSession::q_on_stream_open(quicly_stream_open_t *self, quicly_stream_t *s
 {
     custom_quicly_stream_open_t *self_ptr = (custom_quicly_stream_open_t *) self;
     static const quicly_stream_callbacks_t stream_callbacks = {
-        quicly_streambuf_destroy, quicly_streambuf_egress_shift, quicly_streambuf_egress_emit, q_on_stop_sending, q_on_receive,
-        q_on_receive_reset};
+        quicly_streambuf_destroy, quicly_streambuf_egress_shift, quicly_streambuf_egress_emit,
+        q_on_stop_sending, q_on_receive, q_on_receive_reset};
     int ret;
 
     if ((ret = quicly_streambuf_create(stream, sizeof(custom_quicly_streambuf_t))) != 0)
