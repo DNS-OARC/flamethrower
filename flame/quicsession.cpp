@@ -96,13 +96,13 @@ void QUICSession::receive_data(const char data[], size_t len, const uvw::Addr *s
 
         int ret;
         /* let the current connection handle ingress packets */
-        sockaddr sa;
+        sockaddr_storage sa;
         if (_family == AF_INET) {
             uv_ip4_addr(src_addr->ip.data(), src_addr->port, (sockaddr_in *) &sa);
         } else {
             uv_ip6_addr(src_addr->ip.data(), src_addr->port, (sockaddr_in6 *) &sa);
         }
-        ret = quicly_receive(q_conn, nullptr, &sa, &decoded);
+        ret = quicly_receive(q_conn, nullptr, (sockaddr *) &sa, &decoded);
 
         send_pending();
         if (ret != 0 && ret != QUICLY_ERROR_PACKET_IGNORED) {
