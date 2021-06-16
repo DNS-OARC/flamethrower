@@ -282,6 +282,9 @@ void TrafGen::start_wait_timer_for_session_finish()
 #ifdef QUIC_ENABLE
         if (_traf_config->protocol == Protocol::QUIC) {
             _quic_session->close();
+            _quic_session.reset();
+            handle_timeouts(true);
+            _finish_session_timer.reset();
             if (!_stopping)
                 start_quic_session();
         } else
@@ -475,7 +478,9 @@ void TrafGen::start()
 #ifdef QUIC_ENABLE
     else if (_traf_config->protocol == Protocol::QUIC) {
         _shutdown_timer->on<uvw::TimerEvent>([this](auto &, auto &) {
-                _quic_session->close();
+                if (_quic_session.get())
+                    _quic_session->close();
+
                 _timeout_timer->stop();
                 if (_udp_handle.get()) {
                     _udp_handle->stop();

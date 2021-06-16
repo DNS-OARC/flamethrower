@@ -33,7 +33,6 @@ QUICSession::QUICSession(std::shared_ptr<uvw::UDPHandle> handle,
     quicly_amend_ptls_context(q_ctx.tls);
     q_ctx.stream_open = (quicly_stream_open_t *) &q_stream_open;
     q_ctx.closed_by_remote =(quicly_closed_by_remote_t *) &q_closed_by_remote;
-    printf("cid:: %d\n", cid.master_id);
 
     _alpn = ptls_iovec_init("doq", 3);
     q_hand_prop = {0};
