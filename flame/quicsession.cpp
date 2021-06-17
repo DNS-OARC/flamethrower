@@ -129,16 +129,12 @@ void QUICSession::send_pending()
                 size_t i;
                 for (i = 0; i != num_packets; ++i) {
                     // XXX libuv needs to own this since it frees async
-                    char *data = (char*)std::malloc(packets[i].iov_len);
-                    memcpy(data, packets[i].iov_base, packets[i].iov_len);
-                    if (data == nullptr) {
-                        throw std::runtime_error("unable to allocate datagram memory");
-                    }
-                    if (_family == AF_INET) {
-                        _handle->send<uvw::IPv4>(_target.address, _port, data, packets[i].iov_len);
-                    } else {
-                        _handle->send<uvw::IPv6>(_target.address, _port, data, packets[i].iov_len);
-                    }
+                    std::unique_ptr<char[]> data{new char[packets[i].iov_len]};
+                    memcpy(data.get(), packets[i].iov_base, packets[i].iov_len);
+                    if (_family == AF_INET)
+                        _handle->send<uvw::IPv4>(_target.address, _port, std::move(data), packets[i].iov_len);
+                    else
+                        _handle->send<uvw::IPv6>(_target.address, _port, std::move(data), packets[i].iov_len);
                 }
                 break;
             case QUICLY_ERROR_FREE_CONNECTION:
