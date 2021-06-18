@@ -80,8 +80,11 @@ void QUICSession::close()
     if (q_conn) {
         quicly_close(q_conn, 0, "No Error");
         send_pending();
-        quicly_free(q_conn);
-        q_conn = nullptr;
+        //free the conn if it wasn't already done by send_pending
+        if (q_conn) {
+            quicly_free(q_conn);
+            q_conn = nullptr;
+        }
     }
 }
 
@@ -184,6 +187,10 @@ void QUICSession::q_on_receive(quicly_stream_t *stream, size_t off, const void *
 
         /* remove used bytes from receive buffer */
         quicly_streambuf_ingress_shift(stream, input.len);
+        //close the connection on the last opened stream
+        if (quicly_num_streams(stream->conn) <= 1) {
+            quicly_close(stream->conn, 0, "No Error");
+        }
     }
 }
 
