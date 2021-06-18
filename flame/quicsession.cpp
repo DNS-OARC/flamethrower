@@ -1,4 +1,5 @@
 #include <iostream>
+#include <unistd.h>
 #include "quicsession.h"
 
 QUICSession::QUICSession(std::shared_ptr<uvw::UDPHandle> handle,
@@ -76,9 +77,11 @@ quicly_stream_id_t QUICSession::write(std::unique_ptr<char[]> data, size_t len)
 
 void QUICSession::close()
 {
-    if (quicly_get_state(q_conn) == QUICLY_STATE_CONNECTED) {
+    if (q_conn) {
         quicly_close(q_conn, 0, "No Error");
         send_pending();
+        quicly_free(q_conn);
+        q_conn = nullptr;
     }
 }
 
@@ -104,12 +107,12 @@ void QUICSession::receive_data(const char data[], size_t len, const uvw::Addr *s
         }
         ret = quicly_receive(q_conn, nullptr, (sockaddr *) &sa, &decoded);
 
-        send_pending();
         if (ret != 0 && ret != QUICLY_ERROR_PACKET_IGNORED) {
             return;
         }
 
     }
+    send_pending();
 }
 
 void QUICSession::send_pending()
@@ -122,30 +125,26 @@ void QUICSession::send_pending()
     size_t num_packets = 10;
     int ret;
 
-    if ((ret = quicly_send(q_conn, &dest, &src, packets, &num_packets, buf, sizeof(buf))) == 0 && num_packets != 0) {
-
-        switch (ret) {
-            case 0:
-                size_t i;
-                for (i = 0; i != num_packets; ++i) {
-                    // XXX libuv needs to own this since it frees async
-                    std::unique_ptr<char[]> data{new char[packets[i].iov_len]};
-                    memcpy(data.get(), packets[i].iov_base, packets[i].iov_len);
-                    if (_family == AF_INET)
-                        _handle->send<uvw::IPv4>(_target.address, _port, std::move(data), packets[i].iov_len);
-                    else
-                        _handle->send<uvw::IPv6>(_target.address, _port, std::move(data), packets[i].iov_len);
-                }
-                break;
-            case QUICLY_ERROR_FREE_CONNECTION:
-                // connection is closed & free
-                quicly_free(q_conn);
-                q_conn = nullptr;
-                break;
-            default:
-                _conn_error();
-                throw std::runtime_error("quicly send failed: " + std::to_string(ret));
-        }
+    switch ((ret = quicly_send(q_conn, &dest, &src, packets, &num_packets, buf, sizeof(buf)))) {
+        case 0:
+            for (size_t i = 0; i < num_packets; ++i) {
+                // libuv needs to own this in an unique_ptr since it frees async
+                std::unique_ptr<char[]> data{new char[packets[i].iov_len]};
+                memcpy(data.get(), packets[i].iov_base, packets[i].iov_len);
+                if (_family == AF_INET)
+                    _handle->send<uvw::IPv4>(_target.address, _port, std::move(data), packets[i].iov_len);
+                else
+                    _handle->send<uvw::IPv6>(_target.address, _port, std::move(data), packets[i].iov_len);
+            }
+            break;
+        case QUICLY_ERROR_FREE_CONNECTION:
+            // connection is closed & free
+            quicly_free(q_conn);
+            q_conn = nullptr;
+            break;
+        default:
+            _conn_error();
+            throw std::runtime_error("quicly send failed: " + std::to_string(ret));
     }
 }
 
