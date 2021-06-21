@@ -421,7 +421,8 @@ void TrafGen::start_quic()
     _metrics->trafgen_id(_udp_handle->sock().port);
 
     _udp_handle->on<uvw::UDPDataEvent>([this](const uvw::UDPDataEvent &event, uvw::UDPHandle &h) {
-        _quic_session->receive_data(event.data.get(), event.length, &event.sender);
+        if (_quic_session)
+            _quic_session->receive_data(event.data.get(), event.length, &event.sender);
     });
 
     _udp_handle->recv();
@@ -478,14 +479,14 @@ void TrafGen::start()
 #ifdef QUIC_ENABLE
     else if (_traf_config->protocol == Protocol::QUIC) {
         _shutdown_timer->on<uvw::TimerEvent>([this](auto &, auto &) {
+                if (_udp_handle.get())
+                    _udp_handle->stop();
                 if (_quic_session.get())
                     _quic_session->close();
 
                 _timeout_timer->stop();
-                if (_udp_handle.get()) {
-                    _udp_handle->stop();
+                if (_udp_handle.get())
                     _udp_handle->close();
-                }
                 _timeout_timer->close();
                 _shutdown_timer->close();
                 this->handle_timeouts();

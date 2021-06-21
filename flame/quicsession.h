@@ -44,6 +44,10 @@ public:
             quicly_cid_plaintext_t cid);
     virtual ~QUICSession();
 
+    /*
+     * Close the session and the underlying connection.
+     * Depending on the state of the session, the close will be graceful or abrut
+     */
     virtual void close();
     virtual void receive_data(const char data[], size_t len, const uvw::Addr *src_addr);
     /*

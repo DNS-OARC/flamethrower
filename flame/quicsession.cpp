@@ -91,7 +91,8 @@ void QUICSession::close()
 void QUICSession::receive_data(const char data[], size_t len, const uvw::Addr *src_addr)
 {
     size_t off = 0;
-    assert(q_conn);
+    if (!q_conn)
+        return;
 
     /* split UDP datagram into multiple QUIC packets */
     while (off < len) {
@@ -226,11 +227,7 @@ void QUICSession::q_on_closed_by_remote(quicly_closed_by_remote_t *self, quicly_
                ";frame=" << PRIu64 << frame_type << ";reason=" << std::string(reason, reason_len) << std::endl;
         }
     } else if (QUICLY_ERROR_IS_QUIC_APPLICATION(err)) {
-        std::cerr << "application close:code=0" << PRIx16 << QUICLY_ERROR_GET_ERROR_CODE(err) <<
-            ";reason=" << std::string(reason, reason_len) << std::endl;
     } else if (err == QUICLY_ERROR_RECEIVED_STATELESS_RESET) {
-        std::cerr << "stateless reset" << std::endl;
-    } else if (err == QUICLY_ERROR_NO_COMPATIBLE_VERSION) {
         std::cerr << "no compatible version" << std::endl;
     } else {
         std::cerr << "unexpected close:code=" << PRIu16 << err << std::endl;
