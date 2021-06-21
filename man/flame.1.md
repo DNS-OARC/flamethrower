@@ -16,13 +16,12 @@ flame \--version
 
 # DESCRIPTION
 
-Flamethrower is a small, fast, configurable tool for functional testing,
-benchmarking, and stress testing DNS servers and networks. It supports IPv4,
-IPv6, UDP and TCP, and has a modular system for generating queries used in the
-tests.
+Flamethrower is a small, fast, configurable tool for functional testing, benchmarking, 
+and stress testing DNS servers and networks. It supports IPv4, IPv6, UDP, TCP, and DoT and 
+has a modular system for generating queries used in the tests.
 
-It was built as an alternative to [dnsperf](https://github.com/DNS-OARC/dnsperf)
-and many of the command line options are compatible.
+Originally built as an alternative to dnsperf (https://github.com/DNS-OARC/dnsperf), 
+many of the command line options are compatible.
 
 ## Target
 
@@ -30,14 +29,17 @@ Target can be either an IP address or host name which will be resolved first.
 
 ## Options
 
+-b *BIND_IP*
+: IP address to bind to. Default is 0.0.0.0 for inet or ::0 for inet6.
+
 -q *QCOUNT*
-: Number of queries to send every *DELAY_MS* interval. Default is 10.
+: Number of queries to send every *DELAY_MS* interval. Default is 10. For DoH this specifies the number of concurrent HTTP/2 streams. If this number is larger than the maximum number of concurrent streams supported by the DoH server (100 for most), timeouts will happen.
 
 -c *TCOUNT*
 : Number of concurrent traffic generators per process. Default is 10.
 
 -p *PORT*
-: Which port to flame. Default is 53.
+: Which port to flame. Default is 53 for UDP/TCP, 443 for DoH and 853 for DoT.
 
 -d *DELAY_MS*
 : Delay between each traffic generator's run in milliseconds. Default is 1.
@@ -69,8 +71,11 @@ Target can be either an IP address or host name which will be resolved first.
 -R
 : Randomize the query list before sending. Default is false.
 
--P ( udp | tcp )
+-P ( udp | tcp | dot | doh )
 : Protocol to use. Default is udp.
+
+-M ( GET | POST )
+: HTTP method to use for DNS over HTTPS. Default is GET.
 
 -Q *QPS*
 : Rate limit to a maximum queries per second, 0 is unlimited. Default is 0.

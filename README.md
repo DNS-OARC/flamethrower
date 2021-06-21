@@ -1,63 +1,31 @@
 Flamethrower [![Build Status](https://travis-ci.org/DNS-OARC/flamethrower.svg?branch=master)](https://travis-ci.org/DNS-OARC/flamethrower)
 ============
+> This project is in [active development](https://github.com/ns1/community/blob/master/project_status/ACTIVE_DEVELOPMENT.md).
 
 A DNS performance and functional testing utility.
 
-2017-2019 © NSONE, Inc.
-
-License
--------
-This code is released under Apache License 2.0. You can find terms and conditions in the LICENSE file.
-
+2017-2020© NSONE, Inc.
 
 Overview
 --------
 
-Flamethrower is a small, fast, configurable tool for functional testing, benchmarking, and stress testing DNS servers and networks. It supports IPv4, IPv6, UDP, TCP, TCPTLS, QUIC and has a modular system for generating queries used in the tests.
+Flamethrower is a small, fast, configurable tool for functional testing, benchmarking, and stress testing DNS servers and networks. It supports IPv4, IPv6, UDP, TCP, DoT, DoH, and DoQ (QUIC) and has a modular system for generating queries used in the tests.
 
-Dependencies
-------------
+The support of DNS-over-QUIC is experimental, following the draft RFC https://datatracker.ietf.org/doc/draft-huitema-quic-dnsoquic/
 
-* CMake >= 3.8
-* Linux or OSX
-* libuv >= 1.23.0
-* libldns >= 1.7.0
-* gnutls >= 3.3
-* C++ compiler supporting C++17
+Originally built as an alternative to [dnsperf](https://github.com/DNS-OARC/dnsperf), many of the command line options are compatible.
 
-Build
------
+Getting Started
+---------------
 
-CMake based build, requires dependencies above. You may need to set PKG_CONFIG_PATH to help locate the dependencies.
+The easiest way to get started with Flamethrower is to use the [public docker image](https://hub.docker.com/repository/docker/ns1labs/flame):
 ```
-mkdir build; cd build
-cmake ..
-make
+docker pull ns1labs/flame
+docker run ns1labs/flame --help
 ```
 
-Experimental support is included for DNS-over-QUIC, following the draft RFC https://datatracker.ietf.org/doc/draft-huitema-quic-dnsoquic/
-DoQ requires additional dependencies:
- * quicly https://github.com/h2o/quicly
- * openssl >= 1.0.2
- 
-To build with DoQ support, first checkout and build quicly:
-```
-git clone https://github.com/h2o/quicly.git
-cd quicly
-git submodule update --init --recursive
-mkdir build; cd build
-cmake ..
-make
-```
-the name of the "build" directory used to build quicly is significant, as it's referenced in the flamethrower paths.
-You then need to manually symlink quicly into the flamethrower 3rd party directory before enabling support in flamethrower and building:
-```
-cd flamethrower
-ln -s <PATH-TO-QUICLY> 3rd/
-mkdir build; cd build
-cmake -DQUIC_ENABLE=ON ..
-make
-```
+There are currently no prebuilt operating system packages. If you would like to build your own executable,
+please see the Build section below.
 
 Usage
 -----
@@ -81,9 +49,19 @@ Flame target, port 5300, TCP:
 flame -p 5300 -P tcp target.test.com
 ```
 
-Flame target, port 443, TCPTLS:
+Flame target, port 443, DoT:
 ```
-flame -p 443 -P tcptls target.test.com
+flame -p 443 -P dot target.test.com
+```
+
+Flame target, DNS over HTTPS GET:
+```
+flame -P doh target.test.com/dns-query
+```
+
+Flame target, DNS over HTTPS POST:
+```
+flame -P doh -M POST target.test.com/dns-query
 ```
 
 Flame target with random labels:
@@ -125,5 +103,74 @@ Detailed Features
 
  There is currently no built-in support for multiprocess sending, so the maximum throughput will be reached once a single CPU is saturated. However, you may manually start several concurrent `flame` processes, including up to 1 per CPU available. There is future planned support for builtin multiprocess sending.
 
+Build Dependencies
+------------------
 
+* CMake >= 3.8
+* Linux or OSX
+* libuv >= 1.23.0
+* libldns >= 1.7.0
+* gnutls >= 3.3
+* C++ compiler supporting C++17
 
+Optional DoH support requires:
+* nghttp2
+
+Optional experimental DoQ support requires:
+ * quicly https://github.com/h2o/quicly
+ * openssl >= 1.0.2
+
+Building
+--------
+
+Building is based on CMake.
+
+Default build:
+```
+mkdir build; cd build
+cmake ..
+make
+```
+
+To build with DoH support:
+```
+mkdir build; cd build
+cmake -DDOH_ENABLE=ON ..
+make
+```
+
+To build with DoQ support, first checkout and build quicly:
+```
+git clone https://github.com/h2o/quicly.git
+cd quicly
+git submodule update --init --recursive
+mkdir build; cd build
+cmake ..
+make
+```
+the name of the "build" directory used to build quicly is significant, as it's referenced in the flamethrower paths.
+You then need to manually symlink quicly into the flamethrower 3rd party directory before enabling support in flamethrower and building:
+```
+cd flamethrower
+ln -s <PATH-TO-QUICLY> 3rd/
+mkdir build; cd build
+cmake -DQUIC_ENABLE=ON ..
+make
+```
+
+Building the docker image:
+```
+org="myorg"
+image="myflame"
+tag="latest"
+docker build --network host -t ${org}/${image}:${tag} -f Dockerfile .
+docker run --rm -it --net host ${org}/${image}:${tag} --help
+```
+
+Contributions
+---
+Pull Requests and issues are welcome. See the [NS1 Contribution Guidelines](https://github.com/ns1/community) for more information.
+
+License
+-------
+This code is released under Apache License 2.0. You can find terms and conditions in the LICENSE file.

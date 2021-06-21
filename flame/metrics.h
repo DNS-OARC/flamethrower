@@ -118,7 +118,6 @@ class Metrics
     friend class MetricsMgr;
 
     std::shared_ptr<uvw::Loop> _loop;
-    MetricsMgr &_mgr;
 
     std::string _trafgen_id;
 
@@ -147,9 +146,8 @@ public:
     constexpr static const double HR_TO_SEC_MULT = 0.000000001;
     constexpr static const double HR_TO_MSEC_MULT = 0.000001;
 
-    Metrics(std::shared_ptr<uvw::Loop> l, MetricsMgr &m)
+    Metrics(std::shared_ptr<uvw::Loop> l)
         : _loop(l)
-        , _mgr(m)
     {
     }
 

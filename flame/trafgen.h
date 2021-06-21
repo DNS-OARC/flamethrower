@@ -6,44 +6,57 @@
 #include <unordered_map>
 #include <vector>
 
-#include "flame.h"
 #include "config.h"
-#include "metrics.h"
-#include "query.h"
-#include "tcpsession.h"
 
-#ifdef QUIC_ENABLE
-#include "quicly.h"
-#include "quicly/streambuf.h"
+#ifdef DOH_ENABLE
+#include "http.h"
+#include "httpssession.h"
 #endif
 
-#include <TokenBucket.h>
+#include "metrics.h"
+#include "query.h"
+#include "target.h"
+#include "tcpsession.h"
+#include "tokenbucket.h"
+
+#ifdef QUIC_ENABLE
+#include "quicsession.h"
+#include "quicly/cid.h"
+#include "quicly/constants.h"
+#endif
+
 #include <uvw.hpp>
 
 enum class Protocol {
     UDP,
     TCP,
-    TCPTLS,
 #ifdef QUIC_ENABLE
     QUIC,
 #endif
+#ifdef DOH_ENABLE
+    DOH,
+#endif
+    DOT,
 };
 
 struct TrafGenConfig {
-    std::vector<std::string> target_address;
+    std::vector<Target> target_list;
     unsigned int _current_target{0};
     int family{0};
+    std::string bind_ip;
     unsigned int port{53};
     int r_timeout{3};
     long s_delay{1};
     long batch_count{10};
     Protocol protocol{Protocol::UDP};
-    const std::string& next_target_address()
+#ifdef DOH_ENABLE
+    HTTPMethod method{HTTPMethod::POST};
+#endif
+    const Target& next_target()
     {
-        const std::string& next = target_address[_current_target];
-
+        const Target& next = target_list[_current_target];
         _current_target++;
-        if (_current_target >= target_address.size())
+        if (_current_target >= target_list.size())
             _current_target = 0;
         return next;
     }
@@ -73,15 +86,14 @@ class TrafGen
     // a randomized list of query ids that are not currently in flight
     std::vector<uint16_t> _free_id_list;
 
+#ifdef QUIC_ENABLE
+    std::unordered_map<quicly_stream_id_t, Query> _open_streams;
+    std::shared_ptr<QUICSession> _quic_session;
+    quicly_cid_plaintext_t q_next_cid = {0, 0, 0, 0};
+#endif
+
     bool _stopping;
 
-#ifdef QUIC_ENABLE
-    quicly_conn_t *q_conn;
-    quicly_stream_open_t q_stream_open;
-    quicly_context_t q_ctx;
-    quicly_cid_plaintext_t q_next_cid;
-    ptls_context_t q_tlsctx;
-#endif
 
     void handle_timeouts(bool force_reset = false);
 
@@ -91,12 +103,13 @@ class TrafGen
     void udp_send();
 
     void start_tcp_session();
-    void start_wait_timer_for_tcp_finish();
+    void start_wait_timer_for_session_finish();
+
+    bool in_flight();
 
 #ifdef QUIC_ENABLE
     void start_quic();
-    void quic_send();
-    void q_process_msg(quicly_conn_t *conn, const uint8_t *src, size_t dgram_len);
+    void start_quic_session();
 #endif
 
 public:
