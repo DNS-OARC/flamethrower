@@ -22,6 +22,7 @@ TrafGen::TrafGen(std::shared_ptr<uvw::Loop> l,
     , _traf_config(tgc)
     , _qgen(q)
     , _rate_limit(r)
+    , _started_sending(false)
     , _stopping(false)
 {
     // build a list of random ids we will use for queries
@@ -134,6 +135,7 @@ void TrafGen::start_tcp_session()
             // might be better to do this after write (in WriteEvent) but it needs to be available
             // by the time DataEvent fires, and we don't want a race there
             _in_flight[id].send_time = std::chrono::high_resolution_clock::now();
+            _started_sending = true;
 
 #ifdef DOH_ENABLE
             // Send one by one with DoH
@@ -268,7 +270,7 @@ void TrafGen::start_wait_timer_for_tcp_finish()
         auto now = std::chrono::high_resolution_clock::now();
         auto cur_wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - wait_time_start).count();
 
-        if (_in_flight.size() && (cur_wait_ms < (_traf_config->r_timeout * 1000))) {
+        if ( (!_started_sending || _in_flight.size()) && (cur_wait_ms < (_traf_config->r_timeout * 1000))) {
             // queries in flight and timeout time not elapsed, still wait
             return;
         } else if (cur_wait_ms < (_traf_config->s_delay)) {
@@ -279,6 +281,8 @@ void TrafGen::start_wait_timer_for_tcp_finish()
 
         // shut down timer and connection. TCP CloseEvent will handle restarting sends.
         _finish_session_timer->stop();
+        _started_sending = false;
+        _tcp_handle->stop();
         _finish_session_timer->close();
         _tcp_handle->close();
     });

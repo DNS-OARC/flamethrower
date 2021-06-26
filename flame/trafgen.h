@@ -77,6 +77,7 @@ class TrafGen
     // a randomized list of query ids that are not currently in flight
     std::vector<uint16_t> _free_id_list;
 
+    bool _started_sending;
     bool _stopping;
 
     void handle_timeouts(bool force_reset = false);
