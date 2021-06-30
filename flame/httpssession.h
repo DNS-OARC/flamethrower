@@ -78,6 +78,7 @@ public:
 
     void settings_received();
 
+    std::unordered_map<int32_t, std::vector<uint8_t>> _recv_chunks;
 protected:
     void destroy_stream();
     void destroy_session();
