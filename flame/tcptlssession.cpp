@@ -97,11 +97,20 @@ void TCPTLSSession::receive_data(const char data[], size_t len)
 
     case LinkState::DATA:
         for (;;) {
-            char buf[2048];
+            char buf[16384];
             ssize_t len = gnutls_record_recv(_gnutls_session, buf, sizeof(buf));
             if (len > 0) {
                 TCPSession::receive_data(buf, len);
             } else {
+                if (len == GNUTLS_E_AGAIN) {
+                    // Check if we don't have any data left to read
+                    if (_pull_buffer.empty()) {
+                        break;
+                    }
+                    continue;
+                } else if (len == GNUTLS_E_INTERRUPTED) {
+                    continue;
+                }
                 break;
             }
         }
