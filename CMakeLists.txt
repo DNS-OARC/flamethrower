@@ -61,10 +61,18 @@ else ()
 endif()
 
 pkg_search_module(CATCH QUIET catch2>=2.3 catch>=2.3)
+pkg_check_modules(LIBDOCOPT docopt)
 
 # ::-------------------------------------------------------------------------:: 
 # BUILD TARGETS
 # ::-------------------------------------------------------------------------:: 
+
+if (NOT LIBDOCOPT_FOUND)
+    set(LIBDOCOPT_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/3rd/docopt.cpp")
+    set(LIBDOCOPT_LIBRARIES docopt)
+    add_library(docopt STATIC 3rd/docopt.cpp/docopt.cpp)
+    target_include_directories(docopt PUBLIC ${LIBDOCOPT_INCLUDE_DIRS})
+endif()
 
 set(flamecore_src
     flame/metrics.cpp
@@ -86,7 +94,6 @@ set(flamecore_dirs
     PUBLIC ${LIBUV_INCLUDE_DIRS}
     PUBLIC ${LIBLDNS_INCLUDE_DIRS}
     PUBLIC ${LIBGNUTLS_INCLUDE_DIRS}
-    PUBLIC "${CMAKE_SOURCE_DIR}/3rd/docopt.cpp"
     PUBLIC "${CMAKE_SOURCE_DIR}/3rd/json"
     PUBLIC "${CMAKE_SOURCE_DIR}/3rd/url-parser"
     PUBLIC "${CMAKE_SOURCE_DIR}/3rd/uvw"
@@ -103,9 +110,12 @@ set(flamecore_libs
     )
 
 set(flame_execs
-    3rd/docopt.cpp/docopt.cpp
     3rd/url-parser/url_parser.c
     flame/main.cpp
+    )
+
+set(flame_dirs
+    PUBLIC ${LIBDOCOPT_INCLUDE_DIRS}
     )
 
 if (DOH_ENABLE)
@@ -142,10 +152,14 @@ target_link_libraries(flamecore ${flamecore_libs})
 
 add_executable(flame ${flame_execs})
 
+target_include_directories(flame ${flame_dirs})
+
 target_link_libraries(flame
         PRIVATE flamecore
         PRIVATE ${LIBUV_LDFLAGS}
         PRIVATE ${LIBUV_LIBRARIES}
+        PRIVATE ${LIBDOCOPT_LDFLAGS}
+        PRIVATE ${LIBDOCOPT_LIBRARIES}
         PRIVATE Threads::Threads
         )
 
