@@ -22,6 +22,12 @@
 
 #include "version.h"
 
+#ifdef USE_HTTP_PARSER
+#include <http_parser.h>
+#else
+#include <url_parser.h>
+#endif
+
 static const char METRIC_ROUTE[] = "/api/v1/metrics";
 static const char USAGE[] =
     R"(Flamethrower.
