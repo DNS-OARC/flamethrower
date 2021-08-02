@@ -60,6 +60,8 @@ else ()
     message(STATUS "DNS over HTTPS (DoH) support is disabled")
 endif()
 
+pkg_search_module(CATCH QUIET catch2>=2.3 catch>=2.3)
+
 # ::-------------------------------------------------------------------------:: 
 # BUILD TARGETS
 # ::-------------------------------------------------------------------------:: 
@@ -151,9 +153,12 @@ add_executable(tests
         tests/main.cpp
         )
 
-target_include_directories(tests SYSTEM
+if (NOT CATCH_FOUND)
+    message(STATUS "Using bundled catch2")
+    target_include_directories(tests SYSTEM
         PRIVATE "${CMAKE_SOURCE_DIR}/3rd/catch"
         )
+endif()
 
 target_include_directories(tests
         PRIVATE "${CMAKE_SOURCE_DIR}/tests"
