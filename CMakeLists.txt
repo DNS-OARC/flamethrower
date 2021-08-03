@@ -52,6 +52,7 @@ pkg_check_modules(LIBUV REQUIRED libuv>=1.23)
 pkg_check_modules(LIBGNUTLS REQUIRED gnutls>=3.3)
 
 option(DOH_ENABLE "Enable DNS over HTTPS (DoH) support" OFF)
+option(USE_HTTP_PARSER "Use http_parse library instead of url_parse" OFF)
 if (DOH_ENABLE)
     pkg_search_module(LIBNGHTTP2 REQUIRED nghttp2 libnghttp2)
     message(STATUS "DNS over HTTPS (DoH) support is enabled")
@@ -59,12 +60,37 @@ if (DOH_ENABLE)
 else ()
     message(STATUS "DNS over HTTPS (DoH) support is disabled")
 endif()
+if (USE_HTTP_PARSER)
+    add_definitions(-DUSE_HTTP_PARSER)
+endif()
 
 pkg_search_module(CATCH QUIET catch2>=2.3 catch>=2.3)
+pkg_check_modules(LIBDOCOPT docopt)
 
 # ::-------------------------------------------------------------------------:: 
 # BUILD TARGETS
 # ::-------------------------------------------------------------------------:: 
+
+if (NOT LIBDOCOPT_FOUND)
+    set(LIBDOCOPT_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/3rd/docopt.cpp")
+    set(LIBDOCOPT_LIBRARIES docopt)
+    add_library(docopt STATIC 3rd/docopt.cpp/docopt.cpp)
+    target_include_directories(docopt PUBLIC ${LIBDOCOPT_INCLUDE_DIRS})
+endif()
+
+if (NOT USE_HTTP_PARSER)
+    set(LIBURL_PARSER_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/3rd/url-parser")
+    set(LIBURL_PARSER_LIBRARIES url_parser)
+    add_library(url_parser STATIC 3rd/url-parser/url_parser.c)
+    target_include_directories(url_parser PUBLIC ${LIBURL_PARSER_INCLUDE_DIRS})
+else()
+    find_file(HTTP_PARSER_H NAMES http_parser.h)
+    find_library(HTTP_PARSER_LIBRARY NAMES http_parser)
+    if (NOT HTTP_PARSER_H OR NOT HTTP_PARSER_LIBRARY)
+        status(FATAL "http_parser library development files not found")
+    endif()
+    set(LIBURL_PARSER_LIBRARIES ${HTTP_PARSER_LIBRARY})
+endif()
 
 set(flamecore_src
     flame/metrics.cpp
@@ -86,9 +112,8 @@ set(flamecore_dirs
     PUBLIC ${LIBUV_INCLUDE_DIRS}
     PUBLIC ${LIBLDNS_INCLUDE_DIRS}
     PUBLIC ${LIBGNUTLS_INCLUDE_DIRS}
-    PUBLIC "${CMAKE_SOURCE_DIR}/3rd/docopt.cpp"
     PUBLIC "${CMAKE_SOURCE_DIR}/3rd/json"
-    PUBLIC "${CMAKE_SOURCE_DIR}/3rd/url-parser"
+    PUBLIC ${LIBURL_PARSER_INCLUDE_DIRS}
     PUBLIC "${CMAKE_SOURCE_DIR}/3rd/uvw"
     PUBLIC "${CMAKE_SOURCE_DIR}/3rd/cpp-httplib"
     )
@@ -103,9 +128,11 @@ set(flamecore_libs
     )
 
 set(flame_execs
-    3rd/docopt.cpp/docopt.cpp
-    3rd/url-parser/url_parser.c
     flame/main.cpp
+    )
+
+set(flame_dirs
+    PUBLIC ${LIBDOCOPT_INCLUDE_DIRS}
     )
 
 if (DOH_ENABLE)
@@ -142,10 +169,15 @@ target_link_libraries(flamecore ${flamecore_libs})
 
 add_executable(flame ${flame_execs})
 
+target_include_directories(flame ${flame_dirs})
+
 target_link_libraries(flame
         PRIVATE flamecore
         PRIVATE ${LIBUV_LDFLAGS}
         PRIVATE ${LIBUV_LIBRARIES}
+        PRIVATE ${LIBDOCOPT_LDFLAGS}
+        PRIVATE ${LIBDOCOPT_LIBRARIES}
+        PRIVATE ${LIBURL_PARSER_LIBRARIES}
         PRIVATE Threads::Threads
         )
 

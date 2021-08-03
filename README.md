@@ -114,6 +114,10 @@ Build Dependencies
 Optional DoH support requires:
 * nghttp2
 
+Optional dependencies:
+* catch >= 2.3
+* docopt
+
 Building
 --------
 

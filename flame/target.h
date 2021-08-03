@@ -1,7 +1,7 @@
 #ifndef FLAMETHROWER_TARGET_H
 #define FLAMETHROWER_TARGET_H
 
-#include <url_parser.h>
+struct http_parser_url;
 
 struct Target {
     http_parser_url* parsed;

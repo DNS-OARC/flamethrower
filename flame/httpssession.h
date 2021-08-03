@@ -2,10 +2,15 @@
 
 #include <gnutls/gnutls.h>
 #include <nghttp2/nghttp2.h>
-#include <url_parser.h>
 
 #ifdef DOH_ENABLE
 #include "base64.h"
+#endif
+
+#ifdef USE_HTTP_PARSER
+#include <http_parser.h>
+#else
+#include <url_parser.h>
 #endif
 
 #include "http.h"
