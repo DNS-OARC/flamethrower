@@ -3,7 +3,7 @@
 #pragma once
 
 #include "config.h"
-#include "json.hpp"
+#include <nlohmann/json.hpp>
 
 #include <chrono>
 #include <fstream>

@@ -117,6 +117,7 @@ Optional DoH support requires:
 Optional dependencies:
 * catch >= 2.3
 * docopt
+* nlohmann-json >= 3.7.3
 
 Building
 --------
