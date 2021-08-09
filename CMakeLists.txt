@@ -66,6 +66,8 @@ endif()
 
 pkg_search_module(CATCH QUIET catch2>=2.3 catch>=2.3)
 pkg_check_modules(LIBDOCOPT docopt)
+find_package(nlohmann_json QUIET 3.7.3)
+find_package(httplib QUIET)
 
 # ::-------------------------------------------------------------------------:: 
 # BUILD TARGETS
@@ -92,6 +94,21 @@ else()
     set(LIBURL_PARSER_LIBRARIES ${HTTP_PARSER_LIBRARY})
 endif()
 
+if (NOT nlohmann_json_FOUND)
+    message(STATUS "Using bundled nlohmann_json library")
+    set (nlohmann_json_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/3rd/json")
+else()
+    set (nlohmann_json_LIBRARIES nlohmann_json::nlohmann_json)
+endif()
+
+if (NOT httplib_FOUND)
+    message(STATUS "Using bundled cpp-httplib library")
+    set (httplib_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/3rd/cpp-httplib")
+else()
+    set (httplib_LIBRARIES httplib::httplib)
+endif()
+
+
 set(flamecore_src
     flame/metrics.cpp
     flame/metrics.h
@@ -112,10 +129,9 @@ set(flamecore_dirs
     PUBLIC ${LIBUV_INCLUDE_DIRS}
     PUBLIC ${LIBLDNS_INCLUDE_DIRS}
     PUBLIC ${LIBGNUTLS_INCLUDE_DIRS}
-    PUBLIC "${CMAKE_SOURCE_DIR}/3rd/json"
     PUBLIC ${LIBURL_PARSER_INCLUDE_DIRS}
+    PUBLIC ${nlohmann_json_INCLUDE_DIRS}
     PUBLIC "${CMAKE_SOURCE_DIR}/3rd/uvw"
-    PUBLIC "${CMAKE_SOURCE_DIR}/3rd/cpp-httplib"
     )
 
 set(flamecore_libs
@@ -133,6 +149,7 @@ set(flame_execs
 
 set(flame_dirs
     PUBLIC ${LIBDOCOPT_INCLUDE_DIRS}
+    PUBLIC ${httplib_INCLUDE_DIRS}
     )
 
 if (DOH_ENABLE)
@@ -178,6 +195,8 @@ target_link_libraries(flame
         PRIVATE ${LIBDOCOPT_LDFLAGS}
         PRIVATE ${LIBDOCOPT_LIBRARIES}
         PRIVATE ${LIBURL_PARSER_LIBRARIES}
+        PRIVATE ${nlohmann_json_LIBRARIES}
+        PRIVATE ${httplib_LIBRARIES}
         PRIVATE Threads::Threads
         )
 
