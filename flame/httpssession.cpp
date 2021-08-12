@@ -98,7 +98,12 @@ static int on_data_chunk_recv_callback(nghttp2_session *session, uint8_t flags,
         std::cerr << "No stream data on data chunk" << std::endl;
         return 0;
     }
-    class_session->process_receive(data, len);
+    auto existing = class_session->_recv_chunks.find(stream_id);
+    if (existing != class_session->_recv_chunks.end()) {
+        class_session->_recv_chunks[stream_id].insert(class_session->_recv_chunks[stream_id].end(), data, data + len);
+    } else {
+        class_session->_recv_chunks[stream_id] = std::vector<uint8_t>(data, data + len);
+    }
     return 0;
 }
 
@@ -118,9 +123,14 @@ int on_frame_recv_callback(nghttp2_session *session,
 {
     auto class_session = static_cast<HTTPSSession *>(user_data);
     switch (frame->hd.type) {
-    case NGHTTP2_SETTINGS:
-        class_session->settings_received();
-        break;
+        case NGHTTP2_SETTINGS:
+            class_session->settings_received();
+            break;
+        case NGHTTP2_DATA:
+            if (frame->hd.flags & NGHTTP2_FLAG_END_STREAM) {
+                auto data = class_session->_recv_chunks[frame->data.hd.stream_id];
+                class_session->process_receive(data.data(), data.size());
+            }
     }
     return 0;
 }
