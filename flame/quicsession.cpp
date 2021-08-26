@@ -10,7 +10,7 @@ QUICSession::QUICSession(std::shared_ptr<uvw::UDPHandle> handle,
         Target target,
         unsigned int port,
         int family,
-        quicly_cid_plaintext_t cid)
+        connection_id_t cid)
     :_handle{handle},
     _got_dns_msg{std::move(got_dns_msg_handler)},
     _conn_refused{std::move(conn_refused_handler)},
@@ -19,7 +19,7 @@ QUICSession::QUICSession(std::shared_ptr<uvw::UDPHandle> handle,
     _target{target},
     _port{port},
     _family{family},
-    _cid{cid}
+    _cid{(quicly_cid_plaintext_t) cid}
 {
     q_tlsctx = {
         .random_bytes = ptls_openssl_random_bytes,
@@ -45,7 +45,17 @@ QUICSession::~QUICSession()
 {
 }
 
-quicly_stream_id_t QUICSession::write(std::unique_ptr<char[]> data, size_t len)
+connection_id_t new_connection_id(){
+    connection_id_t cid = {0, 0, 0, 0};
+    return cid;
+}
+
+connection_id_t next_connection_id(connection_id_t id){
+    ++id.master_id;
+    return id;
+}
+
+stream_id_t QUICSession::write(std::unique_ptr<char[]> data, size_t len)
 {
     int ret;
     if (!q_conn) {
@@ -72,7 +82,7 @@ quicly_stream_id_t QUICSession::write(std::unique_ptr<char[]> data, size_t len)
     // in UDP, this buffer gets freed by libuv after send. in quic, it gets copied internally to
     // quic datagram, so this can be freed immediately
 
-    return id;
+    return (stream_id_t) id;
 }
 
 void QUICSession::close()
@@ -168,7 +178,7 @@ void QUICSession::q_on_receive_reset(quicly_stream_t *stream, int err)
 {
     custom_quicly_streambuf_t *sbuf = (custom_quicly_streambuf_t *) stream->data;
     QUICSession *ctx = (QUICSession *) sbuf->user_ctx;
-    ctx->_stream_rst(stream->stream_id);
+    ctx->_stream_rst((stream_id_t) stream->stream_id);
 }
 
 void QUICSession::q_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
@@ -184,7 +194,7 @@ void QUICSession::q_on_receive(quicly_stream_t *stream, size_t off, const void *
         /* obtain contiguous bytes from the receive buffer */
         ptls_iovec_t input = quicly_streambuf_ingress_get(stream);
         std::vector<char> msg((char *) input.base, (char *) (input.base+input.len));
-        ctx->_got_dns_msg(msg, stream->stream_id);
+        ctx->_got_dns_msg(msg, (stream_id_t) stream->stream_id);
 
         /* remove used bytes from receive buffer */
         quicly_streambuf_ingress_shift(stream, input.len);

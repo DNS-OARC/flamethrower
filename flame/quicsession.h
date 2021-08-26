@@ -26,12 +26,18 @@ typedef struct {
     void *user_ctx;
 } custom_quicly_closed_by_remote_t;
 
+typedef quicly_stream_id_t stream_id_t;
+typedef quicly_cid_plaintext_t connection_id_t;
+
+connection_id_t next_connection_id(connection_id_t id);
+connection_id_t new_connection_id();
+
 class QUICSession {
 public:
     using conn_refused_cb = std::function<void()>;
     using conn_error_cb = std::function<void()>;
-    using stream_rst_cb = std::function<void(quicly_stream_id_t id)>;
-    using got_dns_msg_cb = std::function<void(std::vector<char> data, quicly_stream_id_t id)>;
+    using stream_rst_cb = std::function<void(stream_id_t id)>;
+    using got_dns_msg_cb = std::function<void(std::vector<char> data, stream_id_t id)>;
 
     QUICSession(std::shared_ptr<uvw::UDPHandle> handle,
             got_dns_msg_cb got_dns_msg_handler,
@@ -41,7 +47,7 @@ public:
             Target target,
             unsigned int port,
             int family,
-            quicly_cid_plaintext_t cid);
+            connection_id_t cid);
     virtual ~QUICSession();
 
     /*
@@ -55,7 +61,7 @@ public:
      * Implicitly opens a new quic connection if necessary.
      * Returns the stream_id of the opened stream carying the query.
      */
-    virtual quicly_stream_id_t write(std::unique_ptr<char[]> data, size_t len);
+    virtual stream_id_t write(std::unique_ptr<char[]> data, size_t len);
 
     void send_pending();
 

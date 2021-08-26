@@ -21,8 +21,6 @@
 
 #ifdef QUIC_ENABLE
 #include "quicsession.h"
-#include "quicly/cid.h"
-#include "quicly/constants.h"
 #endif
 
 #include <uvw.hpp>
@@ -87,9 +85,10 @@ class TrafGen
     std::vector<uint16_t> _free_id_list;
 
 #ifdef QUIC_ENABLE
-    std::unordered_map<quicly_stream_id_t, Query> _open_streams;
+    std::unordered_map<stream_id_t, Query> _open_streams;
     std::shared_ptr<QUICSession> _quic_session;
-    quicly_cid_plaintext_t q_next_cid = {0, 0, 0, 0};
+    // the cid for the next quic connection
+    connection_id_t _q_next_cid;
 #endif
 
     bool _stopping;

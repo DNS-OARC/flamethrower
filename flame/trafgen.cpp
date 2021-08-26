@@ -28,6 +28,7 @@ TrafGen::TrafGen(std::shared_ptr<uvw::Loop> l,
     std::mt19937 g(rd());
 
 #ifdef QUIC_ENABLE
+    _q_next_cid = new_connection_id();
     if (_traf_config->protocol == Protocol::QUIC) {
         // same max as below, to mimic the behavior of the other protocols,
         // even if the streams_id use an uint64_t
@@ -322,11 +323,11 @@ void TrafGen::start_quic_session()
         _open_streams.clear();
         _metrics->net_error();
     };
-    auto stream_rst = [this](quicly_stream_id_t id) {
+    auto stream_rst = [this](stream_id_t id) {
         _metrics->receive(_open_streams[id].send_time, 2, _open_streams.size());
         _open_streams.erase(id);
     };
-    auto got_dns_msg = [this](std::vector<char> data, quicly_stream_id_t id) {
+    auto got_dns_msg = [this](std::vector<char> data, stream_id_t id) {
         if (data.size() <= 12) {
             _metrics->bad_receive(_in_flight.size());
             return;
@@ -337,8 +338,8 @@ void TrafGen::start_quic_session()
     };
 
     _quic_session = std::make_shared<QUICSession>(_udp_handle, got_dns_msg, conn_refused, conn_error, stream_rst,
-            current_target, _traf_config->port, _traf_config->family, q_next_cid);
-    ++q_next_cid.master_id;
+            current_target, _traf_config->port, _traf_config->family, _q_next_cid);
+    _q_next_cid = next_connection_id(_q_next_cid);
 
     for (int i = 0; i < _traf_config->batch_count; i++) {
         if (_open_streams.size() == std::numeric_limits<uint16_t>::max()) {
@@ -350,7 +351,7 @@ void TrafGen::start_quic_session()
         //in doq, dns messages ID are set to 0
         auto qt = _qgen->next_udp(0);
 
-        quicly_stream_id_t id = _quic_session->write(std::move(std::get<0>(qt)), std::get<1>(qt));
+        stream_id_t id = _quic_session->write(std::move(std::get<0>(qt)), std::get<1>(qt));
 
         _metrics->send(std::get<1>(qt), 1, _open_streams.size());
         _open_streams[id].send_time = std::chrono::high_resolution_clock::now();
@@ -520,7 +521,7 @@ void TrafGen::handle_timeouts(bool force_reset)
     auto now = std::chrono::high_resolution_clock::now();
 #ifdef QUIC_ENABLE
     if (_traf_config->protocol == Protocol::QUIC) {
-        std::vector<quicly_stream_id_t> timed_out;
+        std::vector<stream_id_t> timed_out;
         for (auto i : _open_streams) {
             if (force_reset || std::chrono::duration_cast<std::chrono::seconds>(now - i.second.send_time).count() >= _traf_config->r_timeout) {
                 timed_out.push_back(i.first);
