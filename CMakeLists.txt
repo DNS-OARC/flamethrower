@@ -49,11 +49,11 @@ pkg_search_module(LIBLDNS REQUIRED libldns ldns)
 pkg_check_modules(LIBUV REQUIRED libuv>=1.23)
 pkg_check_modules(LIBGNUTLS REQUIRED gnutls>=3.3)
 
-option(QUIC_ENABLE "Enable QUIC support" OFF)
-if (QUIC_ENABLE)
+option(DOQ_ENABLE "Enable QUIC support" OFF)
+if (DOQ_ENABLE)
     pkg_check_modules(OPENSSL REQUIRED libcrypto>=1.0.2)
     message(STATUS "QUIC support is enabled")
-    add_definitions(-DQUIC_ENABLE)
+    add_definitions(-DDOQ_ENABLE)
 else()
     message(STATUS "QUIC support is disabled")
 endif()
@@ -138,7 +138,7 @@ if (DOH_ENABLE)
         )
 endif()
 
-if (QUIC_ENABLE)
+if (DOQ_ENABLE)
     set(flamecore_src 
         ${flamecore_src}
         flame/quicsession.cpp

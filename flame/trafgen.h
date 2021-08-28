@@ -19,7 +19,7 @@
 #include "tcpsession.h"
 #include "tokenbucket.h"
 
-#ifdef QUIC_ENABLE
+#ifdef DOQ_ENABLE
 #include "quicsession.h"
 #endif
 
@@ -28,8 +28,8 @@
 enum class Protocol {
     UDP,
     TCP,
-#ifdef QUIC_ENABLE
-    QUIC,
+#ifdef DOQ_ENABLE
+    DOQ,
 #endif
 #ifdef DOH_ENABLE
     DOH,
@@ -84,7 +84,7 @@ class TrafGen
     // a randomized list of query ids that are not currently in flight
     std::vector<uint16_t> _free_id_list;
 
-#ifdef QUIC_ENABLE
+#ifdef DOQ_ENABLE
     std::unordered_map<stream_id_t, Query> _open_streams;
     std::shared_ptr<QUICSession> _quic_session;
     // the cid for the next quic connection
@@ -106,7 +106,7 @@ class TrafGen
 
     bool in_flight();
 
-#ifdef QUIC_ENABLE
+#ifdef DOQ_ENABLE
     void start_quic();
     void start_quic_session();
 #endif

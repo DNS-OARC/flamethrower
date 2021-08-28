@@ -27,9 +27,9 @@ TrafGen::TrafGen(std::shared_ptr<uvw::Loop> l,
     std::random_device rd;
     std::mt19937 g(rd());
 
-#ifdef QUIC_ENABLE
+#ifdef DOQ_ENABLE
     _q_next_cid = new_connection_id();
-    if (_traf_config->protocol == Protocol::QUIC) {
+    if (_traf_config->protocol == Protocol::DOQ) {
         // same max as below, to mimic the behavior of the other protocols,
         // even if the streams_id use an uint64_t
         _open_streams.reserve(std::numeric_limits<uint16_t>::max());
@@ -280,8 +280,8 @@ void TrafGen::start_wait_timer_for_session_finish()
         _finish_session_timer->stop();
         _finish_session_timer->close();
 
-#ifdef QUIC_ENABLE
-        if (_traf_config->protocol == Protocol::QUIC) {
+#ifdef DOQ_ENABLE
+        if (_traf_config->protocol == Protocol::DOQ) {
             _quic_session->close();
             _quic_session.reset();
             handle_timeouts(true);
@@ -297,7 +297,7 @@ void TrafGen::start_wait_timer_for_session_finish()
     _finish_session_timer->start(uvw::TimerHandle::Time{1}, uvw::TimerHandle::Time{50});
 }
 
-#ifdef QUIC_ENABLE
+#ifdef DOQ_ENABLE
 
 void TrafGen::start_quic_session()
 {
@@ -400,7 +400,7 @@ void TrafGen::udp_send()
     }
 }
 
-#ifdef QUIC_ENABLE
+#ifdef DOQ_ENABLE
 
 void TrafGen::start_quic()
 {
@@ -442,8 +442,8 @@ void TrafGen::start()
         });
         _sender_timer->start(uvw::TimerHandle::Time{1}, uvw::TimerHandle::Time{_traf_config->s_delay});
     }
-#ifdef QUIC_ENABLE
-    else if (_traf_config->protocol == Protocol::QUIC) {
+#ifdef DOQ_ENABLE
+    else if (_traf_config->protocol == Protocol::DOQ) {
         start_quic();
         start_quic_session();
     }
@@ -477,8 +477,8 @@ void TrafGen::start()
                 this->handle_timeouts();
                 });
     }
-#ifdef QUIC_ENABLE
-    else if (_traf_config->protocol == Protocol::QUIC) {
+#ifdef DOQ_ENABLE
+    else if (_traf_config->protocol == Protocol::DOQ) {
         _shutdown_timer->on<uvw::TimerEvent>([this](auto &, auto &) {
                 if (_udp_handle.get())
                     _udp_handle->stop();
@@ -519,8 +519,8 @@ void TrafGen::handle_timeouts(bool force_reset)
 {
 
     auto now = std::chrono::high_resolution_clock::now();
-#ifdef QUIC_ENABLE
-    if (_traf_config->protocol == Protocol::QUIC) {
+#ifdef DOQ_ENABLE
+    if (_traf_config->protocol == Protocol::DOQ) {
         std::vector<stream_id_t> timed_out;
         for (auto i : _open_streams) {
             if (force_reset || std::chrono::duration_cast<std::chrono::seconds>(now - i.second.send_time).count() >= _traf_config->r_timeout) {
@@ -550,7 +550,7 @@ void TrafGen::handle_timeouts(bool force_reset)
 
 bool TrafGen::in_flight()
 {
-#ifdef QUIC_ENABLE
+#ifdef DOQ_ENABLE
     return _in_flight.size()||_open_streams.size();
 #else
     return _in_flight.size();

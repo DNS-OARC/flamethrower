@@ -55,7 +55,7 @@ static const char USAGE[] =
       -f FILE          Read records from FILE, one per row, QNAME TYPE
       -p PORT          Which port to flame [defaults: 53, 443 for DoH, 853 for DoT, 784 for DoQ]
       -F FAMILY        Internet family (inet/inet6) [default: inet]
-      -P PROTOCOL      Protocol to use (udp/tcp/dot/doh) [default: udp]
+      -P PROTOCOL      Protocol to use (udp/tcp/dot/doh/doq) [default: udp]
       -M HTTPMETHOD    HTTP method to use (POST/GET) when DoH is used [default: GET]
       -g GENERATOR     Generate queries with the given generator [default: static]
       -o FILE          Metrics output file, JSON format
@@ -219,16 +219,16 @@ int main(int argc, char *argv[])
     } else if (args["-P"].asString() == "udp") {
         proto = Protocol::UDP;
     }
-    else if (args["-P"].asString() == "quic") {
-#ifdef QUIC_ENABLE
-        proto = Protocol::QUIC;
+    else if (args["-P"].asString() == "doq") {
+#ifdef DOQ_ENABLE
+        proto = Protocol::DOQ;
 #else
 			std::cerr << "DNS over QUIC support is not enabled" << std::endl;
 			return 1;
 #endif
     }
     else {
-        std::cerr << "protocol must be 'udp', 'tcp', 'dot', 'doh', 'quic'" << std::endl;
+        std::cerr << "protocol must be 'udp', 'tcp', 'dot', 'doh', 'doq'" << std::endl;
         return 1;
     }
 
@@ -239,8 +239,8 @@ int main(int argc, char *argv[])
         else if (proto == Protocol::DOH)
             args["-p"] = std::string("443");
 #endif
-#ifdef QUIC_ENABLE
-        else if (proto == Protocol::QUIC)
+#ifdef DOQ_ENABLE
+        else if (proto == Protocol::DOQ)
             args["-p"] = std::string("784");
 #endif
         else 
