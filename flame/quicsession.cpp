@@ -145,10 +145,7 @@ void QUICSession::send_pending()
                 // libuv needs to own this in an unique_ptr since it frees async
                 std::unique_ptr<char[]> data{new char[packets[i].iov_len]};
                 memcpy(data.get(), packets[i].iov_base, packets[i].iov_len);
-                if (_family == AF_INET)
-                    _handle->send<uvw::IPv4>(_target.address, _port, std::move(data), packets[i].iov_len);
-                else
-                    _handle->send<uvw::IPv6>(_target.address, _port, std::move(data), packets[i].iov_len);
+                _handle->send(_target.address, _port, std::move(data), packets[i].iov_len);
             }
             break;
         case QUICLY_ERROR_FREE_CONNECTION:

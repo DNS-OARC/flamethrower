@@ -414,9 +414,9 @@ void TrafGen::start_quic()
     });
 
     if (_traf_config->family == AF_INET) {
-        _udp_handle->bind<uvw::IPv4>(_traf_config->bind_ip, 0);
+        _udp_handle->bind<uvw::UDPHandle::IPv4>(_traf_config->bind_ip, 0);
     } else {
-        _udp_handle->bind<uvw::IPv6>(_traf_config->bind_ip, 0, uvw::UDPHandle::Bind::IPV6ONLY);
+        _udp_handle->bind<uvw::UDPHandle::IPv6>(_traf_config->bind_ip, 0);
     }
 
     _metrics->trafgen_id(_udp_handle->sock().port);
