@@ -1,10 +1,11 @@
-// Copyright 2017-2019 NSONE, Inc
+// Copyright 2017 NSONE, Inc
 
 #include <algorithm>
 #include <iostream>
 #include <memory>
 #include <random>
 #include <string>
+#include <netinet/in.h>
 
 #include "trafgen.h"
 #include "tcptlssession.h"
@@ -21,6 +22,7 @@ TrafGen::TrafGen(std::shared_ptr<uvw::Loop> l,
     , _traf_config(tgc)
     , _qgen(q)
     , _rate_limit(r)
+    , _started_sending(false)
     , _stopping(false)
 {
     // build a list of random ids we will use for queries
@@ -107,6 +109,8 @@ void TrafGen::start_tcp_session()
     Target current_target = _traf_config->next_target();
     _tcp_handle = _loop->resource<uvw::TcpHandle>(_traf_config->family);
 
+    connect_tcp_events();
+
     if (_traf_config->family == AF_INET) {
         _tcp_handle->bind<uvw::IPv4>(_traf_config->bind_ip, 0);
     } else {
@@ -142,6 +146,7 @@ void TrafGen::start_tcp_session()
             // might be better to do this after write (in WriteEvent) but it needs to be available
             // by the time DataEvent fires, and we don't want a race there
             _in_flight[id].send_time = std::chrono::high_resolution_clock::now();
+            _started_sending = true;
 
 #ifdef DOH_ENABLE
             // Send one by one with DoH
@@ -189,6 +194,15 @@ void TrafGen::start_tcp_session()
         return;
     }
 
+    // fires ConnectEvent when connected
+    if (_traf_config->family == AF_INET) {
+        _tcp_handle->connect<uvw::IPv4>(current_target.address, _traf_config->port);
+    } else {
+        _tcp_handle->connect<uvw::IPv6>(current_target.address, _traf_config->port);
+    }
+}
+
+void TrafGen::connect_tcp_events() {
     /** SOCKET CALLBACKS **/
 
     // SOCKET: local socket was closed, cleanup resources and possibly restart another connection
@@ -212,8 +226,14 @@ void TrafGen::start_tcp_session()
 
     // SOCKET: socket error
     _tcp_handle->on<uvw::ErrorEvent>([this](uvw::ErrorEvent &event, uvw::TcpHandle &h) {
+        if (_config->verbosity() > 1) {
+            std::cerr <<
+                _tcp_handle->sock().ip << ":" << _tcp_handle->sock().port <<
+                " - " << event.what() << std::endl;
+        }
         _metrics->net_error();
-        // XXX need to close?
+        // triggers an immediate connection retry.
+        _tcp_handle->close();
     });
 
     // INCOMING: remote peer closed connection, EOF
@@ -245,13 +265,6 @@ void TrafGen::start_tcp_session()
         // start reading from incoming stream, fires DataEvent when receiving
         _tcp_handle->read();
     });
-
-    // fires ConnectEvent when connected
-    if (_traf_config->family == AF_INET) {
-        _tcp_handle->connect<uvw::IPv4>(current_target.address, _traf_config->port);
-    } else {
-        _tcp_handle->connect<uvw::IPv6>(current_target.address, _traf_config->port);
-    }
 }
 
 void TrafGen::start_wait_timer_for_session_finish()
@@ -267,7 +280,12 @@ void TrafGen::start_wait_timer_for_session_finish()
         auto now = std::chrono::high_resolution_clock::now();
         auto cur_wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - wait_time_start).count();
 
-        if (this->in_flight() && (cur_wait_ms < (_traf_config->r_timeout * 1000))) {
+        //TODO: put the end of the quic session in a dedicated function
+#ifdef DOQ_ENABLE
+        if ( (((_traf_config->protocol != Protocol::QUIC) && !_started_sending) || this->in_flight()) && (cur_wait_ms < (_traf_config->r_timeout * 1000))) {
+#else
+        if ( (!_started_sending || this->in_flight()) && (cur_wait_ms < (_traf_config->r_timeout * 1000))) {
+#endif
             // queries in flight and timeout time not elapsed, still wait
             return;
         } else if (cur_wait_ms < (_traf_config->s_delay)) {
@@ -278,6 +296,8 @@ void TrafGen::start_wait_timer_for_session_finish()
 
         // shut down timer and connection. TCP CloseEvent will handle restarting sends.
         _finish_session_timer->stop();
+        _started_sending = false;
+        _tcp_handle->stop();
         _finish_session_timer->close();
 
 #ifdef DOQ_ENABLE
@@ -563,8 +583,6 @@ void TrafGen::stop()
     if (_sender_timer.get()) {
         _sender_timer->stop();
     }
-
     long shutdown_length = this->in_flight() ? (_traf_config->r_timeout * 1000) : 1;
     _shutdown_timer->start(uvw::TimerHandle::Time{shutdown_length}, uvw::TimerHandle::Time{0});
-
 }

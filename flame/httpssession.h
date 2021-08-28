@@ -2,10 +2,15 @@
 
 #include <gnutls/gnutls.h>
 #include <nghttp2/nghttp2.h>
-#include <url_parser.h>
 
 #ifdef DOH_ENABLE
 #include "base64.h"
+#endif
+
+#ifdef USE_HTTP_PARSER
+#include <http_parser.h>
+#else
+#include <url_parser.h>
 #endif
 
 #include "http.h"
@@ -73,6 +78,7 @@ public:
 
     void settings_received();
 
+    std::unordered_map<int32_t, std::vector<uint8_t>> _recv_chunks;
 protected:
     void destroy_stream();
     void destroy_session();

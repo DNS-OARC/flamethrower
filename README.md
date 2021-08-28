@@ -9,7 +9,7 @@ A DNS performance and functional testing utility.
 Overview
 --------
 
-Flamethrower is a small, fast, configurable tool for functional testing, benchmarking, and stress testing DNS servers and networks. It supports IPv4, IPv6, UDP, TCP, DoT, DoH, and DoQ (QUIC) and has a modular system for generating queries used in the tests.
+Flamethrower is a small, fast, configurable tool for functional testing, benchmarking, and stress testing DNS servers and networks. It supports IPv4, IPv6, UDP, TCP, DoT, DoH, and DoQ and has a modular system for generating queries used in the tests.
 
 The support of DNS-over-QUIC is experimental, following the draft RFC https://datatracker.ietf.org/doc/draft-huitema-quic-dnsoquic/
 
@@ -115,6 +115,12 @@ Build Dependencies
 
 Optional DoH support requires:
 * nghttp2
+
+Optional dependencies:
+* catch >= 2.3
+* docopt
+* nlohmann-json >= 3.7.3
+* cpp-httplib
 
 Optional experimental DoQ support requires:
  * quicly https://github.com/h2o/quicly

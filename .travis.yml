@@ -13,16 +13,16 @@ matrix:
             - libgnutls28-dev
             - libnghttp2-dev
             - openssl
-    - os: osx
-      addons:
-        homebrew:
-          update: true
-          packages:
-            - cmake
-            - libuv
-            - ldns
-            - nghttp2
-            - openssl
+#    - os: osx
+#      addons:
+#        homebrew:
+#          update: true
+#          packages:
+#            - cmake
+#            - libuv
+#            - ldns
+#            - nghttp2
+#            - openssl
 
 before_script:
   - if [ "${TRAVIS_OS_NAME}" = linux ]; then sh ci/install-libuv.sh; fi

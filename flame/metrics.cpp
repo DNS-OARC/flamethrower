@@ -4,7 +4,6 @@
 #include <iostream>
 #include <sstream>
 
-#include "json.hpp"
 #include "metrics.h"
 #include "version.h"
 
@@ -258,28 +257,10 @@ void MetricsMgr::aggregate_trafgen(const Metrics *m)
         // record per trafgen metrics to out file
         json j;
         j["period_number"] = _aggregate_count;
-        j["period_s_count"] = m->_period_s_count;
-        j["period_r_count"] = m->_period_r_count;
         j["run_id"] = _run_id;
-        j["trafgen_id"] = m->_trafgen_id;
         j["runtime_s"] = _runtime_s;
-        j["period_timeouts"] = m->_period_timeouts;
-        j["in_flight"] = m->_in_flight;
-        j["period_bad_count"] = m->_period_bad_count;
-        j["period_response_avg_ms"] = m->_period_response_avg_ms;
-        j["period_response_min_ms"] = m->_period_response_min_ms;
-        j["period_response_max_ms"] = m->_period_response_max_ms;
-        j["period_net_errors"] = m->_period_net_errors;
-        j["period_tcp_connections"] = m->_period_tcp_connections;
-        j["pkt_size_avg"] = m->_period_pkt_size_avg;
-        for (auto i : m->_response_codes) {
-            ldns_lookup_table* msg = ldns_lookup_by_id(ldns_rcodes, i.first);
-            if (msg)
-                j["responses"][msg->name] = i.second;
-            else
-                j["responses"]["Unknown rcode (" + std::to_string(i.second) + ")"] = i.second;
-        }
-        _metric_file << j << std::endl;
+        m->toJSON(j);
+        _metric_file << j.dump() << std::endl;
     }
 
     // aggregate this trafgen
@@ -295,7 +276,11 @@ void MetricsMgr::aggregate_trafgen(const Metrics *m)
     _agg_total_timeouts += m->_period_timeouts;
 
     _agg_period_bad_count += m->_period_bad_count;
+    _agg_total_bad_count += m->_period_bad_count;
+
     _agg_period_net_errors += m->_period_net_errors;
+    _agg_total_net_errors += m->_period_net_errors;
+
     _agg_period_tcp_connections += m->_period_tcp_connections;
     _agg_total_tcp_connections += m->_period_tcp_connections;
 
@@ -326,6 +311,18 @@ void MetricsMgr::aggregate_trafgen(const Metrics *m)
     for (auto i : m->_response_codes) {
         _response_codes[i.first] += i.second;
     }
+}
+std::string MetricsMgr::toJSON() const
+{
+    json j;
+    j["period_number"] = _aggregate_count;
+    j["run_id"] = _run_id;
+    j["runtime_s"] = _runtime_s;
+    int n = 0;
+    for (const auto &i : _metrics) {
+        i->toJSON(j["trafgen"][n++]);
+    }
+    return j.dump();
 }
 
 // ----------------------
@@ -390,4 +387,25 @@ void Metrics::trafgen_id(u_int port)
     //    sstr << std::hex << hash;
     sstr << port;
     _trafgen_id = sstr.str();
+}
+
+void Metrics::toJSON(nlohmann::json &j) const
+{
+    j["period_s_count"] = _period_s_count;
+    j["period_r_count"] = _period_r_count;
+
+    j["trafgen_id"] = _trafgen_id;
+    
+    j["period_timeouts"] = _period_timeouts;
+    j["in_flight"] = _in_flight;
+    j["period_bad_count"] = _period_bad_count;
+    j["period_response_avg_ms"] = _period_response_avg_ms;
+    j["period_response_min_ms"] = _period_response_min_ms;
+    j["period_response_max_ms"] = _period_response_max_ms;
+    j["period_net_errors"] = _period_net_errors;
+    j["period_tcp_connections"] = _period_tcp_connections;
+    j["pkt_size_avg"] = _period_pkt_size_avg;
+    for (auto i : _response_codes) {
+        j["responses"][ldns_lookup_by_id(ldns_rcodes, i.first)->name] = i.second;
+    }
 }

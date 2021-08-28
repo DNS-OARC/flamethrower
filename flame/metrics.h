@@ -3,6 +3,7 @@
 #pragma once
 
 #include "config.h"
+#include <nlohmann/json.hpp>
 
 #include <chrono>
 #include <fstream>
@@ -110,6 +111,8 @@ public:
 
     void finalize();
 
+    std::string toJSON() const;
+
     std::shared_ptr<Metrics> create_trafgen_metrics();
 };
 
@@ -169,4 +172,7 @@ public:
     }
 
     void bad_receive(u_long in_f);
+
+    void toJSON(nlohmann::json &j) const;
+
 };
