@@ -278,46 +278,58 @@ void TrafGen::start_wait_timer_for_session_finish()
     _finish_session_timer->on<uvw::TimerEvent>([this, wait_time_start](const uvw::TimerEvent &event,
                                                    uvw::TimerHandle &h) {
         auto now = std::chrono::high_resolution_clock::now();
-        auto cur_wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - wait_time_start).count();
-
-        //TODO: put the end of the quic session in a dedicated function
+        int cur_wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - wait_time_start).count();
 #ifdef DOQ_ENABLE
-        if ( (((_traf_config->protocol != Protocol::QUIC) && !_started_sending) || this->in_flight()) && (cur_wait_ms < (_traf_config->r_timeout * 1000))) {
-#else
-        if ( (!_started_sending || this->in_flight()) && (cur_wait_ms < (_traf_config->r_timeout * 1000))) {
+        if (_traf_config->protocol == Protocol::DOQ)
+            finish_quic_session(cur_wait_ms);
+        else
 #endif
-            // queries in flight and timeout time not elapsed, still wait
-            return;
-        } else if (cur_wait_ms < (_traf_config->s_delay)) {
-            // either timed out or nothing in flight. ensure delay period has passed
-            // before restarting
-            return;
-        }
-
-        // shut down timer and connection. TCP CloseEvent will handle restarting sends.
-        _finish_session_timer->stop();
-        _started_sending = false;
-        _tcp_handle->stop();
-        _finish_session_timer->close();
-
-#ifdef DOQ_ENABLE
-        if (_traf_config->protocol == Protocol::DOQ) {
-            _quic_session->close();
-            _quic_session.reset();
-            handle_timeouts(true);
-            _finish_session_timer.reset();
-            if (!_stopping)
-                start_quic_session();
-        } else
-#endif
-        {
-            _tcp_handle->close();
-        }
+            finish_tcp_session(cur_wait_ms);
     });
     _finish_session_timer->start(uvw::TimerHandle::Time{1}, uvw::TimerHandle::Time{50});
 }
 
+void TrafGen::finish_tcp_session(int cur_wait_ms)
+{
+    if ( (!_started_sending || this->in_flight()) && (cur_wait_ms < (_traf_config->r_timeout * 1000))) {
+        // queries in flight and timeout time not elapsed, still wait
+        return;
+    } else if (cur_wait_ms < (_traf_config->s_delay)) {
+        // either timed out or nothing in flight. ensure delay period has passed
+        // before restarting
+        return;
+    }
+
+    // shut down timer and connection. TCP CloseEvent will handle restarting sends.
+    _finish_session_timer->stop();
+    _started_sending = false;
+    _tcp_handle->stop();
+    _finish_session_timer->close();
+    _tcp_handle->close();
+}
+
 #ifdef DOQ_ENABLE
+
+void TrafGen::finish_quic_session(int cur_wait_ms)
+{
+    if ( ( this->in_flight()) && (cur_wait_ms < (_traf_config->r_timeout * 1000))) {
+        // queries in flight and timeout time not elapsed, still wait
+        return;
+    } else if (cur_wait_ms < (_traf_config->s_delay)) {
+        // either timed out or nothing in flight. ensure delay period has passed
+        // before restarting
+        return;
+    }
+
+    _finish_session_timer->stop();
+    _finish_session_timer->close();
+
+    _quic_session->close();
+    _quic_session.reset();
+    handle_timeouts(true);
+    if (!_stopping)
+        start_quic_session();
+}
 
 void TrafGen::start_quic_session()
 {
@@ -337,7 +349,7 @@ void TrafGen::start_quic_session()
             _metrics->receive(_open_streams[i.first].send_time, 2, _open_streams.size());
         }
     };
-    // The pending requests are simly cleared because they are not yet sent if
+    // The pending requests are simply cleared because they are not yet sent if
     // this event occurs
     auto conn_refused = [this]() {
         _open_streams.clear();

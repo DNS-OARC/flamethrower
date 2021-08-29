@@ -105,12 +105,14 @@ class TrafGen
     void connect_tcp_events();
     void start_tcp_session();
     void start_wait_timer_for_session_finish();
+    void finish_tcp_session(int cur_wait_ms);
 
     bool in_flight();
 
 #ifdef DOQ_ENABLE
     void start_quic();
     void start_quic_session();
+    void finish_quic_session(int cur_wait_ms);
 #endif
 
 public:
