@@ -342,7 +342,7 @@ void TrafGen::start_quic_session()
 
     Target current_target = _traf_config->next_target();
 
-    // By the rfc, all send queries are considered to be a SERVFAIL on connection failure (section 5.4).
+    // By the rfc, all send queries are considered to be a SERVFAIL on connection failure.
     auto conn_error = [this]() {
         _metrics->net_error();
         for (auto i : _open_streams) {
@@ -381,7 +381,7 @@ void TrafGen::start_quic_session()
         if (_rate_limit && !_rate_limit->consume(1, this->_loop->now()))
             break;
         //in doq, dns messages ID are set to 0
-        auto qt = _qgen->next_udp(0);
+        auto qt = _qgen->next_tcp(0);
 
         stream_id_t id = _quic_session->write(std::move(std::get<0>(qt)), std::get<1>(qt));
 

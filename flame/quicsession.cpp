@@ -35,7 +35,7 @@ QUICSession::QUICSession(std::shared_ptr<uvw::UDPHandle> handle,
     _q_ctx.stream_open = (quicly_stream_open_t *) &_q_stream_open;
     _q_ctx.closed_by_remote =(quicly_closed_by_remote_t *) &_q_closed_by_remote;
 
-    _alpn = ptls_iovec_init("doq", 3);
+    _alpn = ptls_iovec_init("doq-i03", 7);
     _q_hand_prop = {0};
     _q_hand_prop.client.negotiated_protocols.list = &_alpn;
     _q_hand_prop.client.negotiated_protocols.count = 1;
@@ -185,7 +185,13 @@ void QUICSession::q_on_receive(quicly_stream_t *stream, size_t off, const void *
     if (quicly_recvstate_transfer_complete(&stream->recvstate)) {
         // obtain contiguous bytes from the receive buffer
         ptls_iovec_t input = quicly_streambuf_ingress_get(stream);
-        std::vector<char> msg((char *) input.base, (char *) (input.base+input.len));
+
+        std::uint16_t size = static_cast<unsigned char>(input.base[1]) |
+                             static_cast<unsigned char>(input.base[0]) << 8;
+        if (size != input.len - 2)
+            ctx->_conn_error();
+
+        std::vector<char> msg((char *) (input.base + 2), (char *) (input.base+input.len));
         ctx->_got_dns_msg(msg, (stream_id_t) stream->stream_id);
 
         // remove used bytes from receive buffer

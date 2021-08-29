@@ -62,7 +62,7 @@ static const char USAGE[] =
       -r RECORD        The base record to use as the DNS query for generators [default: test.com]
       -T QTYPE         The query type to use for generators [default: A]
       -f FILE          Read records from FILE, one per row, QNAME TYPE
-      -p PORT          Which port to flame [defaults: 53, 443 for DoH, 853 for DoT, 784 for DoQ]
+      -p PORT          Which port to flame [defaults: 53, 443 for DoH, 853 for DoT, 853 for DoQ]
       -F FAMILY        Internet family (inet/inet6) [default: inet]
       -P PROTOCOL      Protocol to use (udp/tcp/dot/doh/doq) [default: udp]
       -M HTTPMETHOD    HTTP method to use (POST/GET) when DoH is used [default: GET]
@@ -267,7 +267,7 @@ int main(int argc, char *argv[])
 #endif
 #ifdef DOQ_ENABLE
         else if (proto == Protocol::DOQ)
-            args["-p"] = std::string("784");
+            args["-p"] = std::string("853");
 #endif
         else 
             args["-p"] = std::string("53");
