@@ -84,12 +84,12 @@ private:
 
     //tells the negotiated protocol
     ptls_iovec_t _alpn;
-    quicly_conn_t *q_conn = nullptr;
+    quicly_conn_t *_q_conn = nullptr;
     //stores the cid for the next connection
     quicly_cid_plaintext_t _cid;
-    ptls_handshake_properties_t q_hand_prop;
-    custom_quicly_stream_open_t q_stream_open;
-    custom_quicly_closed_by_remote_t q_closed_by_remote;
-    quicly_context_t q_ctx;
-    ptls_context_t q_tlsctx;
+    ptls_handshake_properties_t _q_hand_prop;
+    custom_quicly_stream_open_t _q_stream_open;
+    custom_quicly_closed_by_remote_t _q_closed_by_remote;
+    quicly_context_t _q_ctx;
+    ptls_context_t _q_tlsctx;
 };

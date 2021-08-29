@@ -21,24 +21,24 @@ QUICSession::QUICSession(std::shared_ptr<uvw::UDPHandle> handle,
     _family{family},
     _cid{(quicly_cid_plaintext_t) cid}
 {
-    q_tlsctx = {
+    _q_tlsctx = {
         .random_bytes = ptls_openssl_random_bytes,
         .get_time = &ptls_get_time,
         .key_exchanges = ptls_openssl_key_exchanges,
         .cipher_suites = ptls_openssl_cipher_suites
     };
-    q_stream_open = {{q_on_stream_open}, this};
-    q_closed_by_remote = {{q_on_closed_by_remote}, this};
-    q_ctx = quicly_spec_context;
-    q_ctx.tls = &q_tlsctx;
-    quicly_amend_ptls_context(q_ctx.tls);
-    q_ctx.stream_open = (quicly_stream_open_t *) &q_stream_open;
-    q_ctx.closed_by_remote =(quicly_closed_by_remote_t *) &q_closed_by_remote;
+    _q_stream_open = {{q_on_stream_open}, this};
+    _q_closed_by_remote = {{q_on_closed_by_remote}, this};
+    _q_ctx = quicly_spec_context;
+    _q_ctx.tls = &_q_tlsctx;
+    quicly_amend_ptls_context(_q_ctx.tls);
+    _q_ctx.stream_open = (quicly_stream_open_t *) &_q_stream_open;
+    _q_ctx.closed_by_remote =(quicly_closed_by_remote_t *) &_q_closed_by_remote;
 
     _alpn = ptls_iovec_init("doq", 3);
-    q_hand_prop = {0};
-    q_hand_prop.client.negotiated_protocols.list = &_alpn;
-    q_hand_prop.client.negotiated_protocols.count = 1;
+    _q_hand_prop = {0};
+    _q_hand_prop.client.negotiated_protocols.list = &_alpn;
+    _q_hand_prop.client.negotiated_protocols.count = 1;
 }
 
 QUICSession::~QUICSession()
@@ -58,42 +58,39 @@ connection_id_t next_connection_id(connection_id_t id){
 stream_id_t QUICSession::write(std::unique_ptr<char[]> data, size_t len)
 {
     int ret;
-    if (!q_conn) {
+    if (!_q_conn) {
         struct sockaddr_storage target_addr;
         target_addr.ss_family = _family;
         inet_pton(_family, _target.address.data(), ((sockaddr*)&target_addr)->sa_data);
-        if ( (ret = quicly_connect(&q_conn, &q_ctx, _target.address.data(),
+        if ( (ret = quicly_connect(&_q_conn, &_q_ctx, _target.address.data(),
                         (struct sockaddr*)&target_addr, nullptr, &_cid,
-                        ptls_iovec_init(nullptr, 0), &q_hand_prop, nullptr)) ){
+                        ptls_iovec_init(nullptr, 0), &_q_hand_prop, nullptr)) ){
             throw std::runtime_error("quicly connect failed: " + std::to_string(ret));
         }
     }
 
     quicly_stream_t *stream;
     
-    if ( (ret = quicly_open_stream(q_conn, &stream, 0)) )
+    if ( (ret = quicly_open_stream(_q_conn, &stream, 0)) )
         throw std::runtime_error("quicly stream open failed: " + std::to_string(ret));
     quicly_stream_id_t id = stream->stream_id;
 
-    /* write data to send buffer */
+    // write data to send buffer
     quicly_streambuf_egress_write(stream, (void*)data.get(), len);
     quicly_streambuf_egress_shutdown(stream);
-    // ???
-    // in UDP, this buffer gets freed by libuv after send. in quic, it gets copied internally to
-    // quic datagram, so this can be freed immediately
 
     return (stream_id_t) id;
 }
 
 void QUICSession::close()
 {
-    if (q_conn) {
-        quicly_close(q_conn, 0, "No Error");
+    if (_q_conn) {
+        quicly_close(_q_conn, 0, "No Error");
         send_pending();
         //free the conn if it wasn't already done by send_pending
-        if (q_conn) {
-            quicly_free(q_conn);
-            q_conn = nullptr;
+        if (_q_conn) {
+            quicly_free(_q_conn);
+            _q_conn = nullptr;
         }
     }
 }
@@ -101,29 +98,27 @@ void QUICSession::close()
 void QUICSession::receive_data(const char data[], size_t len, const uvw::Addr *src_addr)
 {
     size_t off = 0;
-    if (!q_conn)
+    if (!_q_conn)
         return;
 
-    /* split UDP datagram into multiple QUIC packets */
+    // split UDP datagram into multiple QUIC packets
     while (off < len) {
         quicly_decoded_packet_t decoded;
-        if (quicly_decode_packet(&q_ctx, &decoded, (uint8_t*) data, len, &off) == SIZE_MAX)
+        if (quicly_decode_packet(&_q_ctx, &decoded, (uint8_t*) data, len, &off) == SIZE_MAX)
             break;
-        /* TODO match incoming packets to connections, handle version negotiation, rebinding, retry, etc. */
 
         int ret;
-        /* let the current connection handle ingress packets */
+        // let the current connection handle ingress packets
         sockaddr_storage sa;
-        if (_family == AF_INET) {
+        if (_family == AF_INET)
             uv_ip4_addr(src_addr->ip.data(), src_addr->port, (sockaddr_in *) &sa);
-        } else {
+        else
             uv_ip6_addr(src_addr->ip.data(), src_addr->port, (sockaddr_in6 *) &sa);
-        }
-        ret = quicly_receive(q_conn, nullptr, (sockaddr *) &sa, &decoded);
 
-        if (ret != 0 && ret != QUICLY_ERROR_PACKET_IGNORED) {
+        ret = quicly_receive(_q_conn, nullptr, (sockaddr *) &sa, &decoded);
+
+        if (ret != 0 && ret != QUICLY_ERROR_PACKET_IGNORED)
             return;
-        }
 
     }
     send_pending();
@@ -131,15 +126,15 @@ void QUICSession::receive_data(const char data[], size_t len, const uvw::Addr *s
 
 void QUICSession::send_pending()
 {
-    if (!q_conn)
+    if (!_q_conn)
         return;
     quicly_address_t dest, src;
     struct iovec packets[10];
-    uint8_t buf[10 * quicly_get_context(q_conn)->transport_params.max_udp_payload_size];
+    uint8_t buf[10 * quicly_get_context(_q_conn)->transport_params.max_udp_payload_size];
     size_t num_packets = 10;
     int ret;
 
-    switch ((ret = quicly_send(q_conn, &dest, &src, packets, &num_packets, buf, sizeof(buf)))) {
+    switch ((ret = quicly_send(_q_conn, &dest, &src, packets, &num_packets, buf, sizeof(buf)))) {
         case 0:
             for (size_t i = 0; i < num_packets; ++i) {
                 // libuv needs to own this in an unique_ptr since it frees async
@@ -150,8 +145,8 @@ void QUICSession::send_pending()
             break;
         case QUICLY_ERROR_FREE_CONNECTION:
             // connection is closed & free
-            quicly_free(q_conn);
-            q_conn = nullptr;
+            quicly_free(_q_conn);
+            _q_conn = nullptr;
             break;
         default:
             _conn_error();
@@ -183,22 +178,21 @@ void QUICSession::q_on_receive(quicly_stream_t *stream, size_t off, const void *
 
     custom_quicly_streambuf_t *sbuf = (custom_quicly_streambuf_t *) stream->data;
     QUICSession *ctx = (QUICSession *) sbuf->user_ctx;
-    /* read input to receive buffer */
+    // read input to receive buffer
     if (quicly_streambuf_ingress_receive(stream, off, src, len) != 0)
         return ;
 
     if (quicly_recvstate_transfer_complete(&stream->recvstate)) {
-        /* obtain contiguous bytes from the receive buffer */
+        // obtain contiguous bytes from the receive buffer
         ptls_iovec_t input = quicly_streambuf_ingress_get(stream);
         std::vector<char> msg((char *) input.base, (char *) (input.base+input.len));
         ctx->_got_dns_msg(msg, (stream_id_t) stream->stream_id);
 
-        /* remove used bytes from receive buffer */
+        // remove used bytes from receive buffer
         quicly_streambuf_ingress_shift(stream, input.len);
         //close the connection on the last opened stream
-        if (quicly_num_streams(stream->conn) <= 1) {
+        if (quicly_num_streams(stream->conn) <= 1)
             quicly_close(stream->conn, 0, "No Error");
-        }
     }
 }
 
