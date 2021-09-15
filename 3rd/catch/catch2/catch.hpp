@@ -4818,9 +4818,15 @@ namespace Catch {
 }
 
 #ifdef CATCH_PLATFORM_MAC
+#if defined(__GNUC__) && (defined(__i386) || defined(__x86_64))
+#define CATCH_TRAP() __asm__("int $3\n" \
+                             :          \
+                             :) /* NOLINT */
+#else                           // Fall back to the generic way.
+#include <signal.h>
 
-    #define CATCH_TRAP() __asm__("int $3\n" : : ) /* NOLINT */
-
+#define CATCH_TRAP() raise(SIGTRAP)
+#endif
 #elif defined(CATCH_PLATFORM_LINUX)
     // If we can use inline assembler, do it because this allows us to break
     // directly at the location of the failing check instead of breaking inside
