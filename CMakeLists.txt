@@ -158,6 +158,7 @@ if (DOH_ENABLE)
         flame/http.h
         flame/httpssession.cpp
         flame/httpssession.h
+        3rd/base64url/base64.cpp
         )
 
     set(flamecore_dirs
@@ -170,11 +171,6 @@ if (DOH_ENABLE)
         ${flamecore_libs}
         PRIVATE ${LIBNGHTTP2_LDFLAGS}
         PRIVATE ${LIBNGHTTP2_LIBRARIES}
-        )
-
-    set(flame_execs
-        ${flame_execs}
-        3rd/base64url/base64.cpp
         )
 endif()
 
