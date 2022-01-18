@@ -64,7 +64,7 @@ class TrafGen
     std::shared_ptr<TokenBucket> _rate_limit;
 
     std::shared_ptr<uvw::UDPHandle> _udp_handle;
-    std::shared_ptr<uvw::TcpHandle> _tcp_handle;
+    std::shared_ptr<uvw::TCPHandle> _tcp_handle;
     std::shared_ptr<TCPSession> _tcp_session;
 
     std::shared_ptr<uvw::TimerHandle> _sender_timer;

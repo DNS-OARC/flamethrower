@@ -16,7 +16,7 @@ static ssize_t gnutls_push_trampoline(gnutls_transport_ptr_t h, const void *buf,
     return session->gnutls_push(buf, len);
 }
 
-TCPTLSSession::TCPTLSSession(std::shared_ptr<uvw::TcpHandle> handle,
+TCPTLSSession::TCPTLSSession(std::shared_ptr<uvw::TCPHandle> handle,
                              TCPSession::malformed_data_cb malformed_data_handler,
                              TCPSession::got_dns_msg_cb got_dns_msg_handler,
                              TCPSession::connection_ready_cb connection_ready_handler,

@@ -96,14 +96,14 @@ void TrafGen::start_tcp_session()
     assert(_tcp_session.get() == 0);
     assert(_finish_session_timer.get() == 0);
     Target current_target = _traf_config->next_target();
-    _tcp_handle = _loop->resource<uvw::TcpHandle>(_traf_config->family);
+    _tcp_handle = _loop->resource<uvw::TCPHandle>(_traf_config->family);
 
     connect_tcp_events();
 
     if (_traf_config->family == AF_INET) {
         _tcp_handle->bind<uvw::IPv4>(_traf_config->bind_ip, 0);
     } else {
-        _tcp_handle->bind<uvw::IPv6>(_traf_config->bind_ip, 0, uvw::TcpHandle::Bind::IPV6ONLY);
+        _tcp_handle->bind<uvw::IPv6>(_traf_config->bind_ip, 0, uvw::TCPHandle::Bind::IPV6ONLY);
     }
 
     _metrics->trafgen_id(_tcp_handle->sock().port);
@@ -196,7 +196,7 @@ void TrafGen::connect_tcp_events() {
     /** SOCKET CALLBACKS **/
 
     // SOCKET: local socket was closed, cleanup resources and possibly restart another connection
-    _tcp_handle->on<uvw::CloseEvent>([this](uvw::CloseEvent &event, uvw::TcpHandle &h) {
+    _tcp_handle->on<uvw::CloseEvent>([this](uvw::CloseEvent &event, uvw::TCPHandle &h) {
         // if timer is still going (e.g. we got here through EndEvent), cancel it
         if (_finish_session_timer.get()) {
             _finish_session_timer->stop();
@@ -215,7 +215,7 @@ void TrafGen::connect_tcp_events() {
     });
 
     // SOCKET: socket error
-    _tcp_handle->on<uvw::ErrorEvent>([this](uvw::ErrorEvent &event, uvw::TcpHandle &h) {
+    _tcp_handle->on<uvw::ErrorEvent>([this](uvw::ErrorEvent &event, uvw::TCPHandle &h) {
         if (_config->verbosity() > 1) {
             std::cerr <<
                 _tcp_handle->sock().ip << ":" << _tcp_handle->sock().port <<
@@ -227,28 +227,28 @@ void TrafGen::connect_tcp_events() {
     });
 
     // INCOMING: remote peer closed connection, EOF
-    _tcp_handle->on<uvw::EndEvent>([this](uvw::EndEvent &event, uvw::TcpHandle &h) {
+    _tcp_handle->on<uvw::EndEvent>([this](uvw::EndEvent &event, uvw::TCPHandle &h) {
         _tcp_session->on_end_event();
     });
 
     // OUTGOING: we've finished writing all our data and are shutting down
-    _tcp_handle->on<uvw::ShutdownEvent>([this](uvw::ShutdownEvent &event, uvw::TcpHandle &h) {
+    _tcp_handle->on<uvw::ShutdownEvent>([this](uvw::ShutdownEvent &event, uvw::TCPHandle &h) {
         _tcp_session->on_shutdown_event();
     });
 
     // INCOMING: remote peer sends data, pass to session
-    _tcp_handle->on<uvw::DataEvent>([this](uvw::DataEvent &event, uvw::TcpHandle &h) {
+    _tcp_handle->on<uvw::DataEvent>([this](uvw::DataEvent &event, uvw::TCPHandle &h) {
         _tcp_session->receive_data(event.data.get(), event.length);
     });
 
     // OUTGOING: write operation has finished
-    _tcp_handle->on<uvw::WriteEvent>([this](uvw::WriteEvent &event, uvw::TcpHandle &h) {
+    _tcp_handle->on<uvw::WriteEvent>([this](uvw::WriteEvent &event, uvw::TCPHandle &h) {
         if (!_finish_session_timer)
             start_wait_timer_for_tcp_finish();
     });
 
     // SOCKET: on connect
-    _tcp_handle->on<uvw::ConnectEvent>([this](uvw::ConnectEvent &event, uvw::TcpHandle &h) {
+    _tcp_handle->on<uvw::ConnectEvent>([this](uvw::ConnectEvent &event, uvw::TCPHandle &h) {
         _tcp_session->on_connect_event();
         _metrics->tcp_connection();
 

@@ -4,7 +4,7 @@
 
 #include "tcpsession.h"
 
-TCPSession::TCPSession(std::shared_ptr<uvw::TcpHandle> handle,
+TCPSession::TCPSession(std::shared_ptr<uvw::TCPHandle> handle,
                        malformed_data_cb malformed_data_handler,
                        got_dns_msg_cb got_dns_msg_handler,
                        connection_ready_cb connection_ready_handler)

@@ -256,5 +256,6 @@ private:
     unsigned int flags;
 };
 
+typedef TcpHandle TCPHandle;
 
 }
