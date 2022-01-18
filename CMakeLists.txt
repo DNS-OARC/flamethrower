@@ -68,6 +68,7 @@ pkg_search_module(CATCH QUIET catch2>=2.3 catch>=2.3)
 pkg_check_modules(LIBDOCOPT docopt)
 find_package(nlohmann_json QUIET 3.7.3)
 find_package(httplib QUIET)
+find_package(uvw QUIET)
 
 # ::-------------------------------------------------------------------------:: 
 # BUILD TARGETS
@@ -108,6 +109,12 @@ else()
     set (httplib_LIBRARIES httplib::httplib)
 endif()
 
+if (NOT uvw_FOUND)
+    message(STATUS "Using bundled uvw library")
+    set(uvw_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/3rd/uvw")
+    set(uvw_LIBRARIES )
+endif()
+
 
 set(flamecore_src
     flame/metrics.cpp
@@ -131,7 +138,7 @@ set(flamecore_dirs
     PUBLIC ${LIBGNUTLS_INCLUDE_DIRS}
     PUBLIC ${LIBURL_PARSER_INCLUDE_DIRS}
     PUBLIC ${nlohmann_json_INCLUDE_DIRS}
-    PUBLIC "${CMAKE_SOURCE_DIR}/3rd/uvw"
+    PUBLIC ${uvw_INCLUDE_DIRS}
     )
 
 set(flamecore_libs
@@ -141,6 +148,7 @@ set(flamecore_libs
     PRIVATE ${LIBLDNS_LIBRARIES}
     PRIVATE ${LIBGNUTLS_LDFLAGS}
     PRIVATE ${LIBGNUTLS_LIBRARIES}
+    PRIVATE ${uvw_LIBRARIES}
     )
 
 set(flame_execs
