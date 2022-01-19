@@ -106,7 +106,7 @@ Build Dependencies
 
 * CMake >= 3.8
 * Linux or OSX
-* libuv >= 1.23.0
+* libuv >= 1.30.0
 * libldns >= 1.7.0
 * gnutls >= 3.3
 * C++ compiler supporting C++17
@@ -119,6 +119,7 @@ Optional dependencies:
 * docopt
 * nlohmann-json >= 3.7.3
 * cpp-httplib
+* uvw >= 1.18.0
 
 Building
 --------
