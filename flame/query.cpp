@@ -5,9 +5,11 @@
 #include <algorithm>
 #include <cctype>
 #include <climits>
+#include <cstring>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <regex>
 #include <sstream>
 #include <stdexcept>
