@@ -74,7 +74,7 @@ struct BaseHandle {
      *
      * * An AsyncHandle handle is always active and cannot be deactivated,
      * except by closing it with uv_close().
-     * * A PipeHandle, TcpHandle, UDPHandle, etc. handle - basically any handle
+     * * A PipeHandle, TCPHandle, UDPHandle, etc. handle - basically any handle
      * that deals with I/O - is active when it is doing something that involves
      * I/O, like reading, writing, connecting, accepting new connections, etc.
      * * A CheckHandle, IdleHandle, TimerHandle, etc. handle is active when it
@@ -279,7 +279,7 @@ public:
      */
     void close() {
         auto err = uv_loop_close(loop.get());
-        if(err) { publish(ErrorEvent{err}); }
+        return err ? publish(ErrorEvent{err}) : loop.reset();
     }
 
     /**

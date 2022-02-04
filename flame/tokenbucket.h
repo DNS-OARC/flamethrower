@@ -2,7 +2,7 @@
 #pragma once
 
 #include <chrono>
-#include <uvw/loop.hpp>
+#include <uvw.hpp>
 
 class TokenBucket
 {
