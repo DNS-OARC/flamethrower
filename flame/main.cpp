@@ -1,4 +1,4 @@
-// Copyright 2017 NSONE, Inc
+// Copyright 2017-2019 NSONE, Inc
 
 #include <iostream>
 #include <iterator>
@@ -62,9 +62,9 @@ static const char USAGE[] =
       -r RECORD        The base record to use as the DNS query for generators [default: test.com]
       -T QTYPE         The query type to use for generators [default: A]
       -f FILE          Read records from FILE, one per row, QNAME TYPE
-      -p PORT          Which port to flame [defaults: 53, 443 for DoH, 853 for DoT]
+      -p PORT          Which port to flame [defaults: 53, 443 for DoH, 853 for DoT, 853 for DoQ]
       -F FAMILY        Internet family (inet/inet6) [default: inet]
-      -P PROTOCOL      Protocol to use (udp/tcp/dot/doh) [default: udp]
+      -P PROTOCOL      Protocol to use (udp/tcp/dot/doh/doq) [default: udp]
       -M HTTPMETHOD    HTTP method to use (POST/GET) when DoH is used [default: GET]
       -g GENERATOR     Generate queries with the given generator [default: static]
       -o FILE          Metrics output file, JSON format
@@ -244,8 +244,17 @@ int main(int argc, char *argv[])
             c_count = 30;
     } else if (args["-P"].asString() == "udp") {
         proto = Protocol::UDP;
-    } else {
-        std::cerr << "protocol must be 'udp', 'tcp', dot' or 'doh'" << std::endl;
+    }
+    else if (args["-P"].asString() == "doq") {
+#ifdef DOQ_ENABLE
+        proto = Protocol::DOQ;
+#else
+			std::cerr << "DNS over QUIC support is not enabled" << std::endl;
+			return 1;
+#endif
+    }
+    else {
+        std::cerr << "protocol must be 'udp', 'tcp', 'dot', 'doh', 'doq'" << std::endl;
         return 1;
     }
 
@@ -256,7 +265,11 @@ int main(int argc, char *argv[])
         else if (proto == Protocol::DOH)
             args["-p"] = std::string("443");
 #endif
-        else
+#ifdef DOQ_ENABLE
+        else if (proto == Protocol::DOQ)
+            args["-p"] = std::string("853");
+#endif
+        else 
             args["-p"] = std::string("53");
     }
 

@@ -9,7 +9,9 @@ A DNS performance and functional testing utility.
 Overview
 --------
 
-Flamethrower is a small, fast, configurable tool for functional testing, benchmarking, and stress testing DNS servers and networks. It supports IPv4, IPv6, UDP, TCP, DoT, and DoH and has a modular system for generating queries used in the tests.
+Flamethrower is a small, fast, configurable tool for functional testing, benchmarking, and stress testing DNS servers and networks. It supports IPv4, IPv6, UDP, TCP, DoT, DoH, and DoQ and has a modular system for generating queries used in the tests.
+
+The support of DNS-over-QUIC is experimental, following the draft RFC https://datatracker.ietf.org/doc/draft-huitema-quic-dnsoquic/
 
 Originally built as an alternative to [dnsperf](https://github.com/DNS-OARC/dnsperf), many of the command line options are compatible.
 
@@ -121,6 +123,10 @@ Optional dependencies:
 * cpp-httplib
 * uvw >= 1.18.0
 
+Optional experimental DoQ support requires:
+ * quicly https://github.com/h2o/quicly
+ * openssl >= 1.0.2
+
 Building
 --------
 
@@ -140,6 +146,25 @@ cmake -DDOH_ENABLE=ON ..
 make
 ```
 
+To build with DoQ support, first checkout and build quicly:
+```
+git clone https://github.com/h2o/quicly.git
+cd quicly
+git submodule update --init --recursive
+mkdir build; cd build
+cmake ..
+make
+```
+the name of the "build" directory used to build quicly is significant, as it's referenced in the flamethrower paths.
+You then need to manually symlink quicly into the flamethrower 3rd party directory before enabling support in flamethrower and building:
+```
+cd flamethrower
+ln -s <PATH-TO-QUICLY> 3rd/
+mkdir build; cd build
+cmake -DQUIC_ENABLE=ON ..
+make
+```
+
 Building the docker image:
 ```
 org="myorg"
@@ -156,4 +181,3 @@ Pull Requests and issues are welcome. See the [NS1 Contribution Guidelines](http
 License
 -------
 This code is released under Apache License 2.0. You can find terms and conditions in the LICENSE file.
-

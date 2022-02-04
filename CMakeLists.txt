@@ -51,6 +51,15 @@ pkg_search_module(LIBLDNS REQUIRED libldns ldns)
 pkg_check_modules(LIBUV REQUIRED libuv>=1.30)
 pkg_check_modules(LIBGNUTLS REQUIRED gnutls>=3.3)
 
+option(DOQ_ENABLE "Enable QUIC support" OFF)
+if (DOQ_ENABLE)
+    pkg_check_modules(OPENSSL REQUIRED libcrypto>=1.0.2)
+    message(STATUS "QUIC support is enabled")
+    add_definitions(-DDOQ_ENABLE)
+else()
+    message(STATUS "QUIC support is disabled")
+endif()
+
 option(DOH_ENABLE "Enable DNS over HTTPS (DoH) support" OFF)
 option(USE_HTTP_PARSER "Use http_parse library instead of url_parse" OFF)
 if (DOH_ENABLE)
@@ -179,6 +188,31 @@ if (DOH_ENABLE)
         ${flamecore_libs}
         PRIVATE ${LIBNGHTTP2_LDFLAGS}
         PRIVATE ${LIBNGHTTP2_LIBRARIES}
+        )
+endif()
+
+if (DOQ_ENABLE)
+    set(flamecore_src 
+        ${flamecore_src}
+        flame/quicsession.cpp
+        flame/quicsession.h
+        3rd/quicly/deps/picotls/lib/openssl.c
+        3rd/quicly/deps/picotls/lib/pembase64.c
+        3rd/quicly/deps/picotls/lib/picotls.c
+        )
+
+    set(flamecore_dirs
+        ${flamecore_dirs}
+        PUBLIC ${OPENSSL_INCLUDE_DIRS}
+        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/quicly/include"
+        PUBLIC "${CMAKE_SOURCE_DIR}/3rd/quicly/deps/picotls/include"
+        )
+
+    set(flamecore_libs
+        ${flamecore_libs}
+        PRIVATE ${OPENSSL_LIBRARIES}
+        PRIVATE "-L ${CMAKE_SOURCE_DIR}/3rd/quicly/build/ -lquicly"
+        PUBLIC ${OPENSSL_LDFLAGS}
         )
 endif()
 

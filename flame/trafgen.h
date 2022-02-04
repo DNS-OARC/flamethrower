@@ -19,11 +19,18 @@
 #include "tcpsession.h"
 #include "tokenbucket.h"
 
+#ifdef DOQ_ENABLE
+#include "quicsession.h"
+#endif
+
 #include <uvw.hpp>
 
 enum class Protocol {
     UDP,
     TCP,
+#ifdef DOQ_ENABLE
+    DOQ,
+#endif
 #ifdef DOH_ENABLE
     DOH,
 #endif
@@ -77,8 +84,16 @@ class TrafGen
     // a randomized list of query ids that are not currently in flight
     std::vector<uint16_t> _free_id_list;
 
+#ifdef DOQ_ENABLE
+    std::unordered_map<stream_id_t, Query> _open_streams;
+    std::shared_ptr<QUICSession> _quic_session;
+    // the cid for the next quic connection
+    connection_id_t _q_next_cid;
+#endif
+
     bool _started_sending;
     bool _stopping;
+
 
     void handle_timeouts(bool force_reset = false);
 
@@ -89,7 +104,16 @@ class TrafGen
 
     void connect_tcp_events();
     void start_tcp_session();
-    void start_wait_timer_for_tcp_finish();
+    void start_wait_timer_for_session_finish();
+    void finish_tcp_session(int cur_wait_ms);
+
+    bool in_flight();
+
+#ifdef DOQ_ENABLE
+    void start_quic();
+    void start_quic_session();
+    void finish_quic_session(int cur_wait_ms);
+#endif
 
 public:
     TrafGen(std::shared_ptr<uvw::Loop> l,

@@ -26,14 +26,25 @@ TrafGen::TrafGen(std::shared_ptr<uvw::Loop> l,
     , _stopping(false)
 {
     // build a list of random ids we will use for queries
-    for (uint16_t i = 0; i < std::numeric_limits<uint16_t>::max(); i++)
-        _free_id_list.push_back(i);
     std::random_device rd;
     std::mt19937 g(rd());
-    std::shuffle(_free_id_list.begin(), _free_id_list.end(), g);
-    // allocate enough space for the amount of queries we expect to have in flight
-    // max here is based on uint16, the number of ids
-    _in_flight.reserve(std::numeric_limits<uint16_t>::max());
+
+#ifdef DOQ_ENABLE
+    _q_next_cid = new_connection_id();
+    if (_traf_config->protocol == Protocol::DOQ) {
+        // same max as below, to mimic the behavior of the other protocols,
+        // even if the streams_id use an uint64_t
+        _open_streams.reserve(std::numeric_limits<uint16_t>::max());
+    } else
+#endif
+    {
+        for (uint16_t i = 0; i < std::numeric_limits<uint16_t>::max(); i++)
+            _free_id_list.push_back(i);
+        std::shuffle(_free_id_list.begin(), _free_id_list.end(), g);
+        // allocate enough space for the amount of queries we expect to have in flight
+        // max here is based on uint16, the number of ids
+        _in_flight.reserve(std::numeric_limits<uint16_t>::max());
+    }
 }
 
 void TrafGen::process_wire(const char data[], size_t len)
@@ -156,17 +167,16 @@ void TrafGen::start_tcp_session()
         }
 
 #ifdef DOH_ENABLE
-        if(_traf_config->protocol != Protocol::DOH) {
+        if(_traf_config->protocol != Protocol::DOH)
 #endif
+        {
             auto qt = _qgen->next_tcp(id_list);
 
             // async send the batch. fires WriteEvent when finished sending.
             _tcp_session->write(std::move(std::get<0>(qt)), std::get<1>(qt));
 
             _metrics->send(std::get<1>(qt), id_list.size(), _in_flight.size());
-#ifdef DOH_ENABLE
         }
-#endif
     };
 
     // For now, treat a TLS handshake failure as malformed data
@@ -244,7 +254,7 @@ void TrafGen::connect_tcp_events() {
     // OUTGOING: write operation has finished
     _tcp_handle->on<uvw::WriteEvent>([this](uvw::WriteEvent &event, uvw::TCPHandle &h) {
         if (!_finish_session_timer)
-            start_wait_timer_for_tcp_finish();
+            start_wait_timer_for_session_finish();
     });
 
     // SOCKET: on connect
@@ -257,7 +267,7 @@ void TrafGen::connect_tcp_events() {
     });
 }
 
-void TrafGen::start_wait_timer_for_tcp_finish()
+void TrafGen::start_wait_timer_for_session_finish()
 {
 
     // wait for all responses, but no longer than query timeout
@@ -268,26 +278,122 @@ void TrafGen::start_wait_timer_for_tcp_finish()
     _finish_session_timer->on<uvw::TimerEvent>([this, wait_time_start](const uvw::TimerEvent &event,
                                                    uvw::TimerHandle &h) {
         auto now = std::chrono::high_resolution_clock::now();
-        auto cur_wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - wait_time_start).count();
-
-        if ( (!_started_sending || _in_flight.size()) && (cur_wait_ms < (_traf_config->r_timeout * 1000))) {
-            // queries in flight and timeout time not elapsed, still wait
-            return;
-        } else if (cur_wait_ms < (_traf_config->s_delay)) {
-            // either timed out or nothing in flight. ensure delay period has passed
-            // before restarting
-            return;
-        }
-
-        // shut down timer and connection. TCP CloseEvent will handle restarting sends.
-        _finish_session_timer->stop();
-        _started_sending = false;
-        _tcp_handle->stop();
-        _finish_session_timer->close();
-        _tcp_handle->close();
+        int cur_wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - wait_time_start).count();
+#ifdef DOQ_ENABLE
+        if (_traf_config->protocol == Protocol::DOQ)
+            finish_quic_session(cur_wait_ms);
+        else
+#endif
+            finish_tcp_session(cur_wait_ms);
     });
     _finish_session_timer->start(uvw::TimerHandle::Time{1}, uvw::TimerHandle::Time{50});
 }
+
+void TrafGen::finish_tcp_session(int cur_wait_ms)
+{
+    if ( (!_started_sending || this->in_flight()) && (cur_wait_ms < (_traf_config->r_timeout * 1000))) {
+        // queries in flight and timeout time not elapsed, still wait
+        return;
+    } else if (cur_wait_ms < (_traf_config->s_delay)) {
+        // either timed out or nothing in flight. ensure delay period has passed
+        // before restarting
+        return;
+    }
+
+    // shut down timer and connection. TCP CloseEvent will handle restarting sends.
+    _finish_session_timer->stop();
+    _started_sending = false;
+    _tcp_handle->stop();
+    _finish_session_timer->close();
+    _tcp_handle->close();
+}
+
+#ifdef DOQ_ENABLE
+
+void TrafGen::finish_quic_session(int cur_wait_ms)
+{
+    if ( ( this->in_flight()) && (cur_wait_ms < (_traf_config->r_timeout * 1000))) {
+        // queries in flight and timeout time not elapsed, still wait
+        return;
+    } else if (cur_wait_ms < (_traf_config->s_delay)) {
+        // either timed out or nothing in flight. ensure delay period has passed
+        // before restarting
+        return;
+    }
+
+    _finish_session_timer->stop();
+    _finish_session_timer->close();
+
+    _quic_session->close();
+    _quic_session.reset();
+    handle_timeouts(true);
+    if (!_stopping)
+        start_quic_session();
+}
+
+void TrafGen::start_quic_session()
+{
+
+    assert(_udp_handle.get());
+    assert(_quic_session.get() == 0);
+    if (_qgen->finished())
+        return;
+    _finish_session_timer.reset();
+
+    Target current_target = _traf_config->next_target();
+
+    // By the rfc, all send queries are considered to be a SERVFAIL on connection failure.
+    auto conn_error = [this]() {
+        _metrics->net_error();
+        for (auto i : _open_streams) {
+            _metrics->receive(_open_streams[i.first].send_time, 2, _open_streams.size());
+        }
+    };
+    // The pending requests are simply cleared because they are not yet sent if
+    // this event occurs
+    auto conn_refused = [this]() {
+        _open_streams.clear();
+        _metrics->net_error();
+    };
+    auto stream_rst = [this](stream_id_t id) {
+        _metrics->receive(_open_streams[id].send_time, 2, _open_streams.size());
+        _open_streams.erase(id);
+    };
+    auto got_dns_msg = [this](std::vector<char> data, stream_id_t id) {
+        if (data.size() <= 12) {
+            _metrics->bad_receive(_in_flight.size());
+            return;
+        }
+        uint8_t rcode = data[3] & 0xf; //dns response code
+        _metrics->receive(_open_streams[id].send_time, rcode, _open_streams.size());
+        _open_streams.erase(id);
+    };
+
+    _quic_session = std::make_shared<QUICSession>(_udp_handle, got_dns_msg, conn_refused, conn_error, stream_rst,
+            current_target, _traf_config->port, _traf_config->family, _q_next_cid);
+    _q_next_cid = next_connection_id(_q_next_cid);
+
+    for (int i = 0; i < _traf_config->batch_count; i++) {
+        if (_open_streams.size() == std::numeric_limits<uint16_t>::max()) {
+            std::cerr << "max in flight reached" << std::endl;
+            return;
+        }
+        if (_rate_limit && !_rate_limit->consume(1, this->_loop->now()))
+            break;
+        //in doq, dns messages ID are set to 0
+        auto qt = _qgen->next_tcp(0);
+
+        stream_id_t id = _quic_session->write(std::move(std::get<0>(qt)), std::get<1>(qt));
+
+        _metrics->send(std::get<1>(qt), 1, _open_streams.size());
+        _open_streams[id].send_time = std::chrono::high_resolution_clock::now();
+    }
+
+    _quic_session->send_pending();
+    start_wait_timer_for_session_finish();
+
+}
+#endif
 
 void TrafGen::udp_send()
 {
@@ -326,6 +432,37 @@ void TrafGen::udp_send()
     }
 }
 
+#ifdef DOQ_ENABLE
+
+void TrafGen::start_quic()
+{
+
+    _udp_handle = _loop->resource<uvw::UDPHandle>(_traf_config->family);
+
+    _udp_handle->on<uvw::ErrorEvent>([this](const uvw::ErrorEvent &e, uvw::UDPHandle &) {
+        if (0 == strcmp(e.name(), "EADDRNOTAVAIL"))
+            throw std::runtime_error("unable to bind to ip address: " + _traf_config->bind_ip);
+        _metrics->net_error();
+    });
+
+    if (_traf_config->family == AF_INET) {
+        _udp_handle->bind<uvw::UDPHandle::IPv4>(_traf_config->bind_ip, 0);
+    } else {
+        _udp_handle->bind<uvw::UDPHandle::IPv6>(_traf_config->bind_ip, 0);
+    }
+
+    _metrics->trafgen_id(_udp_handle->sock().port);
+
+    _udp_handle->on<uvw::UDPDataEvent>([this](const uvw::UDPDataEvent &event, uvw::UDPHandle &h) {
+        if (_quic_session)
+            _quic_session->receive_data(event.data.get(), event.length, &event.sender);
+    });
+
+    _udp_handle->recv();
+
+}
+#endif
+
 void TrafGen::start()
 {
 
@@ -333,51 +470,76 @@ void TrafGen::start()
         start_udp();
         _sender_timer = _loop->resource<uvw::TimerHandle>();
         _sender_timer->on<uvw::TimerEvent>([this](const uvw::TimerEvent &event, uvw::TimerHandle &h) {
-			switch(_traf_config->protocol) {
-				case Protocol::UDP: udp_send(); break;
-				case Protocol::TCP:
-#ifdef DOH_ENABLE
-				case Protocol::DOH:
-#endif
-				case Protocol::DOT: start_tcp_session(); break;
-			}
+            udp_send();
         });
         _sender_timer->start(uvw::TimerHandle::Time{1}, uvw::TimerHandle::Time{_traf_config->s_delay});
-    } else {
+    }
+#ifdef DOQ_ENABLE
+    else if (_traf_config->protocol == Protocol::DOQ) {
+        start_quic();
+        start_quic_session();
+    }
+#endif
+    else {
         start_tcp_session();
     }
 
-    _timeout_timer = _loop->resource<uvw::TimerHandle>();
-    _timeout_timer->on<uvw::TimerEvent>([this](const uvw::TimerEvent &event, uvw::TimerHandle &h) {
+        _timeout_timer = _loop->resource<uvw::TimerHandle>();
+        _timeout_timer->on<uvw::TimerEvent>([this](const uvw::TimerEvent &event, uvw::TimerHandle &h) {
         handle_timeouts();
     });
-    _timeout_timer->start(uvw::TimerHandle::Time{_traf_config->r_timeout * 1000}, uvw::TimerHandle::Time{1000});
+        _timeout_timer->start(uvw::TimerHandle::Time{_traf_config->r_timeout * 1000}, uvw::TimerHandle::Time{1000});
 
     _shutdown_timer = _loop->resource<uvw::TimerHandle>();
-    _shutdown_timer->on<uvw::TimerEvent>([this](auto &, auto &) {
-        if (_udp_handle.get()) {
-            _udp_handle->stop();
-        }
-        if (_tcp_handle.get()) {
-            _tcp_handle->stop();
-        }
+    if (_traf_config->protocol == Protocol::UDP) {
+        _shutdown_timer->on<uvw::TimerEvent>([this](auto &, auto &) {
+                if (_udp_handle.get()) {
+                    _udp_handle->stop();
+                }
+                _timeout_timer->stop();
+                if (_udp_handle.get()) {
+                    _udp_handle->close();
+                }
+                if (_sender_timer.get()) {
+                    _sender_timer->close();
+                }
+                _timeout_timer->close();
+                _shutdown_timer->close();
 
-        _timeout_timer->stop();
+                this->handle_timeouts();
+                });
+    }
+#ifdef DOQ_ENABLE
+    else if (_traf_config->protocol == Protocol::DOQ) {
+        _shutdown_timer->on<uvw::TimerEvent>([this](auto &, auto &) {
+                if (_udp_handle.get())
+                    _udp_handle->stop();
+                if (_quic_session.get())
+                    _quic_session->close();
 
-        if (_udp_handle.get()) {
-            _udp_handle->close();
-        }
-        if (_tcp_handle.get()) {
-            _tcp_handle->close();
-        }
-        if (_sender_timer.get()) {
-            _sender_timer->close();
-        }
-        _timeout_timer->close();
-        _shutdown_timer->close();
-
-        this->handle_timeouts();
-    });
+                _timeout_timer->stop();
+                if (_udp_handle.get())
+                    _udp_handle->close();
+                _timeout_timer->close();
+                _shutdown_timer->close();
+                this->handle_timeouts();
+                });
+    }
+#endif
+    else {
+        _shutdown_timer->on<uvw::TimerEvent>([this](auto &, auto &) {
+            if (_tcp_handle.get()) {
+                _tcp_handle->stop();
+            }
+            _timeout_timer->stop();
+            if (_tcp_handle.get()) {
+                _tcp_handle->close();
+            }
+            _timeout_timer->close();
+            _shutdown_timer->close();
+            this->handle_timeouts();
+            });
+    }
 }
 
 /**
@@ -388,18 +550,43 @@ void TrafGen::start()
 void TrafGen::handle_timeouts(bool force_reset)
 {
 
-    std::vector<uint16_t> timed_out;
     auto now = std::chrono::high_resolution_clock::now();
-    for (auto i : _in_flight) {
-        if (force_reset || std::chrono::duration_cast<std::chrono::seconds>(now - i.second.send_time).count() >= _traf_config->r_timeout) {
-            timed_out.push_back(i.first);
+#ifdef DOQ_ENABLE
+    if (_traf_config->protocol == Protocol::DOQ) {
+        std::vector<stream_id_t> timed_out;
+        for (auto i : _open_streams) {
+            if (force_reset || std::chrono::duration_cast<std::chrono::seconds>(now - i.second.send_time).count() >= _traf_config->r_timeout) {
+                timed_out.push_back(i.first);
+            }
+        }
+        for (auto i : timed_out) {
+            _open_streams.erase(i);
+            _metrics->timeout(_open_streams.size());
+        }
+    } else
+#endif
+    {
+        std::vector<uint16_t> timed_out;
+        for (auto i : _in_flight) {
+            if (force_reset || std::chrono::duration_cast<std::chrono::seconds>(now - i.second.send_time).count() >= _traf_config->r_timeout) {
+                timed_out.push_back(i.first);
+            }
+        }
+        for (auto i : timed_out) {
+            _in_flight.erase(i);
+            _metrics->timeout(_in_flight.size());
+            _free_id_list.push_back(i);
         }
     }
-    for (auto i : timed_out) {
-        _in_flight.erase(i);
-        _metrics->timeout(_in_flight.size());
-        _free_id_list.push_back(i);
-    }
+}
+
+bool TrafGen::in_flight()
+{
+#ifdef DOQ_ENABLE
+    return _in_flight.size()||_open_streams.size();
+#else
+    return _in_flight.size();
+#endif
 }
 
 void TrafGen::stop()
@@ -408,6 +595,6 @@ void TrafGen::stop()
     if (_sender_timer.get()) {
         _sender_timer->stop();
     }
-    long shutdown_length = (_in_flight.size()) ? (_traf_config->r_timeout * 1000) : 1;
+    long shutdown_length = this->in_flight() ? (_traf_config->r_timeout * 1000) : 1;
     _shutdown_timer->start(uvw::TimerHandle::Time{shutdown_length}, uvw::TimerHandle::Time{0});
 }

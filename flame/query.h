@@ -73,6 +73,7 @@ public:
 #endif
     virtual QueryTpt next_udp(uint16_t);
     virtual QueryTpt next_tcp(const std::vector<uint16_t> &);
+    virtual QueryTpt next_tcp(uint16_t);
     bool finished();
 
     virtual const char *name() = 0;
@@ -254,6 +255,7 @@ public:
     //QueryTpt next_base64url(uint16_t);
     QueryTpt next_udp(uint16_t);
     QueryTpt next_tcp(const std::vector<uint16_t> &);
+    QueryTpt next_tcp(uint16_t);
 
     const char *name()
     {

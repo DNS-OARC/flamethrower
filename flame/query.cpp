@@ -188,6 +188,24 @@ QueryGenerator::QueryTpt QueryGenerator::next_tcp(const std::vector<uint16_t> &i
     return std::make_tuple(std::move(buf), total_len);
 }
 
+QueryGenerator::QueryTpt QueryGenerator::next_tcp(uint16_t id)
+{
+
+    WireTpt w = _wire_buffers[_reqs++ % _wire_buffers.size()];
+    size_t len{2 + w.second};
+
+    auto buf = std::make_unique<char[]>(len);
+    // write pkt len
+    uint16_t plen = htons(w.second);
+    memcpy(buf.get(), &plen, sizeof(plen));
+    // write wire
+    memcpy(buf.get() + 2, w.first, w.second);
+    // write id requested
+    uint16_t _id = ntohs(id);
+    memcpy(buf.get() + 2, &_id, sizeof(_id));
+    return std::make_tuple(std::move(buf), len);
+}
+
 QueryGenerator::QueryTpt QueryGenerator::next_udp(uint16_t id)
 {
 
@@ -633,6 +651,11 @@ void NumberNameQueryGenerator::init()
 QueryGenerator::QueryTpt NumberNameQueryGenerator::next_tcp(const std::vector<uint16_t> &id_list)
 {
 
+    throw std::runtime_error("tcp unsupported");
+}
+
+QueryGenerator::QueryTpt NumberNameQueryGenerator::next_tcp(uint16_t id)
+{
     throw std::runtime_error("tcp unsupported");
 }
 
