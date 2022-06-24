@@ -1,10 +1,10 @@
-Flamethrower [![Build Status](https://travis-ci.org/DNS-OARC/flamethrower.svg?branch=master)](https://travis-ci.org/DNS-OARC/flamethrower)
+Flamethrower 
 ============
 > This project is in [active development](https://github.com/ns1/community/blob/master/project_status/ACTIVE_DEVELOPMENT.md).
 
 A DNS performance and functional testing utility.
 
-2017-2020© NSONE, Inc.
+2017-2022© NSONE, Inc.
 
 Overview
 --------
@@ -115,7 +115,6 @@ Optional DoH support requires:
 * nghttp2
 
 Optional dependencies:
-* catch >= 2.3
 * docopt
 * nlohmann-json >= 3.7.3
 * cpp-httplib
