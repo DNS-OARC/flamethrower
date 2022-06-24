@@ -10,7 +10,7 @@ on:
 
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
-  BUILD_TYPE: Release
+  BUILD_TYPE: RelWithDebInfo
   CTEST_OUTPUT_ON_FAILURE: 1
 
 jobs:
@@ -36,7 +36,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends jq
+          sudo apt-get install --yes --no-install-recommends g++ cmake make libldns-dev libnghttp2-dev libuv1-dev libgnutls28-dev pkgconf 
 
       - name: Configure CMake
         # Use a bash shell so we can use the same syntax for environment variable
@@ -52,7 +52,7 @@ jobs:
         working-directory: ${{github.workspace}}/build
         shell: bash
         # Execute the build.  You can specify a specific target with "--target <NAME>"
-        run: cmake --build . --config $BUILD_TYPE -- -j 2
+        run: cmake --build . --config $BUILD_TYPE -DDOH_ENABLE=ON -- -j 2
 
       - name: Test
         working-directory: ${{github.workspace}}/build
