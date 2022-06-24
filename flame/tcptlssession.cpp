@@ -123,10 +123,21 @@ void TCPTLSSession::receive_data(const char data[], size_t len)
 
 void TCPTLSSession::write(std::unique_ptr<char[]> data, size_t len)
 {
-    ssize_t sent = gnutls_record_send(_gnutls_session, data.get(), len);
-    if (sent < 0) {
-        std::cerr << "Error in sending data: " << gnutls_strerror(sent) << std::endl;
+    size_t pos = 0;
+    do {
+        // The number of bytes sent might be less than requested.
+        // The maximum number of bytes this function can send in a single call depends on
+        // the negotiated maximum record size.
+        ssize_t sent = gnutls_record_send(_gnutls_session, data.get() + pos, len - pos);
+        if (sent < 0) {
+            std::cerr << "Error in sending data: " << gnutls_strerror(sent) << std::endl;
+            return;
+        }
+        else {
+            pos += static_cast<size_t>(sent);
+        }
     }
+    while (pos < len);
 }
 
 void TCPTLSSession::do_handshake()
