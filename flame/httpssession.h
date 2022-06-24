@@ -2,6 +2,7 @@
 
 #include <gnutls/gnutls.h>
 #include <nghttp2/nghttp2.h>
+#include <unordered_map>
 
 #ifdef DOH_ENABLE
 #include "base64.h"
