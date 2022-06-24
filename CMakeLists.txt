@@ -204,26 +204,6 @@ target_link_libraries(flame
         PRIVATE Threads::Threads
         )
 
-add_executable(tests
-        tests/main.cpp
-        )
-
-if (NOT CATCH_FOUND)
-    message(STATUS "Using bundled catch2")
-    target_include_directories(tests SYSTEM
-        PRIVATE "${CMAKE_SOURCE_DIR}/3rd/catch"
-        )
-endif()
-
-target_include_directories(tests
-        PRIVATE "${CMAKE_SOURCE_DIR}/tests"
-        PRIVATE "${CMAKE_SOURCE_DIR}/flame"
-        )
-
-target_link_libraries(tests
-        PRIVATE flamecore
-        )
-
 install(TARGETS flame flamecore
         RUNTIME DESTINATION bin
         LIBRARY DESTINATION lib${LIB_SUFFIX}

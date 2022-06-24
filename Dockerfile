@@ -1,4 +1,4 @@
-FROM debian:buster-slim AS build
+FROM debian:bullseye-slim AS build
 
 ENV BUILD_DEPS "g++ cmake make libldns-dev libnghttp2-dev libuv1-dev libgnutls28-dev pkgconf"
 ENV DEBIAN_FRONTEND=noninteractive
@@ -13,12 +13,11 @@ RUN \
     mkdir /tmp/build && \
     cd /tmp/build && \
     cmake -DDOH_ENABLE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo /src && \
-    make all tests && \
-    ./tests
+    make all
 
-FROM debian:buster-slim AS runtime
+FROM debian:bullseye-slim AS runtime
 
-ENV RUNTIME_DEPS "libldns2 libuv1 nghttp2"
+ENV RUNTIME_DEPS "libldns3 libuv1 nghttp2"
 
 RUN \
     apt-get update && \

@@ -32,6 +32,7 @@ HTTPSSession::HTTPSSession(std::shared_ptr<uvw::TCPHandle> handle,
     , _handshake_error{handshake_error_handler}
     , _target{target}
     , _method{method}
+    , _current_session{nullptr}
 {
 }
 

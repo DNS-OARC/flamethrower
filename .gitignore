@@ -1,2 +1,4 @@
 build*/
 build_output/
+cmake-build-*/
+.idea*
