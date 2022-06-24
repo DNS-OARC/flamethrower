@@ -141,11 +141,8 @@ make
 
 Building the docker image:
 ```
-org="myorg"
-image="myflame"
-tag="latest"
-docker build --network host -t ${org}/${image}:${tag} -f Dockerfile .
-docker run --rm -it --net host ${org}/${image}:${tag} --help
+docker build . --tag ns1labs/flame --file Dockerfile
+docker run --rm --net host ns1labs/flame --help
 ```
 
 Contributions
