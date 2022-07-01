@@ -77,9 +77,12 @@ void HTTPSSession::destroy_session()
 
 void HTTPSSession::process_receive(const uint8_t *data, size_t len)
 {
-    const size_t MIN_DNS_QUERY_SIZE = 17;
-    const size_t MAX_DNS_QUERY_SIZE = 512;
-    if (len < MIN_DNS_QUERY_SIZE || len > MAX_DNS_QUERY_SIZE) {
+    // dnsheader is 12, at least one byte for the minimum name,
+    // two bytes for the qtype and another two for the qclass
+    const size_t MIN_DNS_RESPONSE_SIZE = 17;
+    // 512 over UDP without EDNS, but 65535 over TCP
+    const size_t MAX_DNS_RESPONSE_SIZE = 65535;
+    if (len < MIN_DNS_RESPONSE_SIZE || len > MAX_DNS_RESPONSE_SIZE) {
         std::cerr << "malformed data" << std::endl;
         _malformed_data();
         return;
