@@ -52,8 +52,9 @@ void TCPSession::close()
 // accumulate data and try to extract DNS messages
 void TCPSession::receive_data(const char data[], size_t len)
 {
-    const size_t MIN_DNS_QUERY_SIZE = 17;
-    const size_t MAX_DNS_QUERY_SIZE = 512;
+    // dnsheader is 12, at least one byte for the minimum name,
+    // two bytes for the qtype and another two for the qclass
+    const size_t MIN_DNS_RESPONSE_SIZE = 17;
 
     _buffer.append(data, len);
 
@@ -67,7 +68,10 @@ void TCPSession::receive_data(const char data[], size_t len)
         size = static_cast<unsigned char>(_buffer[1]) |
                static_cast<unsigned char>(_buffer[0]) << 8;
 
-        if (size < MIN_DNS_QUERY_SIZE || size > MAX_DNS_QUERY_SIZE) {
+        // no need to check the maximum size here since the maximum size
+        // that a std::uint16t_t can hold, std::numeric_limits<std::uint16_t>::max()
+        // (65535 bytes) is allowed over TCP
+        if (size < MIN_DNS_RESPONSE_SIZE) {
             _malformed_data();
             break;
         }
