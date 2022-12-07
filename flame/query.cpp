@@ -41,7 +41,7 @@ ldns_rr_type QueryGenerator::cvt_qtype(const std::string &t)
     } else if (qt == "SOA") {
         qtype = LDNS_RR_TYPE_SOA;
     } else if (qt == "PTR") {
-        qtype = LDNS_RR_TYPE_AAAA;
+        qtype = LDNS_RR_TYPE_PTR;
     } else if (qt == "TXT") {
         qtype = LDNS_RR_TYPE_TXT;
     } else if (qt == "ANY") {
