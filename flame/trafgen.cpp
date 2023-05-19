@@ -185,11 +185,7 @@ void TrafGen::start_tcp_session()
     }
 
     // fires ConnectEvent when connected
-    if (_traf_config->family == AF_INET) {
-        _tcp_handle->connect<uvw::IPv4>(current_target.address, _traf_config->port);
-    } else {
-        _tcp_handle->connect<uvw::IPv6>(current_target.address, _traf_config->port);
-    }
+    _tcp_handle->connect(current_target.address, _traf_config->port);
 }
 
 void TrafGen::connect_tcp_events() {
