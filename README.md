@@ -1,6 +1,5 @@
 Flamethrower 
 ============
-> This project is in [active development](https://github.com/ns1/community/blob/master/project_status/ACTIVE_DEVELOPMENT.md).
 
 A DNS performance and functional testing utility.
 
