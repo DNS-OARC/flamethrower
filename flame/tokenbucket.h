@@ -21,7 +21,7 @@ public:
     {
     }
 
-    bool consume(const uint64_t tokens, const uvw::Loop::Time now_ms)
+    bool consume(const uint64_t tokens, const uvw::loop::time now_ms)
     {
         if (_token_wallet < tokens) {
             if (_last_fill_ms.count() == 0) {
@@ -46,5 +46,5 @@ private:
     double _rate_qps;
     double _token_wallet;
     // milliseconds, based on uv_now() http://docs.libuv.org/en/v1.x/loop.html#c.uv_now
-    uvw::Loop::Time _last_fill_ms;
+    uvw::loop::time _last_fill_ms;
 };

@@ -19,11 +19,11 @@ class MetricsMgr
     std::chrono::high_resolution_clock::time_point _start_time;
     std::chrono::high_resolution_clock::time_point _stop_time;
 
-    std::shared_ptr<uvw::Loop> _loop;
+    std::shared_ptr<uvw::loop> _loop;
     std::shared_ptr<Config> _config;
 
     // aggregation and output
-    std::shared_ptr<uvw::TimerHandle> _metric_period_timer;
+    std::shared_ptr<uvw::timer_handle> _metric_period_timer;
 
     // metric output file, if enabled
     std::ofstream _metric_file;
@@ -98,7 +98,7 @@ class MetricsMgr
     void aggregate_trafgen(const Metrics *m);
 
 public:
-    MetricsMgr(std::shared_ptr<uvw::Loop> l, std::shared_ptr<Config> c, const std::string &cmdline)
+    MetricsMgr(std::shared_ptr<uvw::loop> l, std::shared_ptr<Config> c, const std::string &cmdline)
         : _loop(l)
         , _config(c)
         , _cmdline(cmdline)
@@ -120,7 +120,7 @@ class Metrics
 {
     friend class MetricsMgr;
 
-    std::shared_ptr<uvw::Loop> _loop;
+    std::shared_ptr<uvw::loop> _loop;
 
     std::string _trafgen_id;
 
@@ -149,7 +149,7 @@ public:
     constexpr static const double HR_TO_SEC_MULT = 0.000000001;
     constexpr static const double HR_TO_MSEC_MULT = 0.000001;
 
-    Metrics(std::shared_ptr<uvw::Loop> l)
+    Metrics(std::shared_ptr<uvw::loop> l)
         : _loop(l)
     {
     }

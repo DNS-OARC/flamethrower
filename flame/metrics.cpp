@@ -4,6 +4,7 @@
 #include <iostream>
 #include <sstream>
 
+#include <nlohmann/json.hpp>
 #include "metrics.h"
 #include "version.h"
 
@@ -41,11 +42,11 @@ void MetricsMgr::start()
         }
         header_to_disk();
     }
-    _metric_period_timer = _loop->resource<uvw::TimerHandle>();
-    _metric_period_timer->on<uvw::TimerEvent>([this](const auto &, auto &) {
+    _metric_period_timer = _loop->resource<uvw::timer_handle>();
+    _metric_period_timer->on<uvw::timer_event>([this](const auto &, auto &) {
         this->periodic_stats();
     });
-    _metric_period_timer->start(uvw::TimerHandle::Time{1000}, uvw::TimerHandle::Time{1000});
+    _metric_period_timer->start(uvw::timer_handle::time{1000}, uvw::timer_handle::time{1000});
     _start_time = std::chrono::high_resolution_clock::now();
     _qps_clock = std::chrono::high_resolution_clock::now();
 }

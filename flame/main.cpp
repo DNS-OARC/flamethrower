@@ -155,13 +155,13 @@ void flow_change(std::queue<std::pair<uint64_t, uint64_t>> qps_flow,
     }
     if (qps_flow.size() == 0)
         return;
-    auto loop = uvw::Loop::getDefault();
-    auto qps_timer = loop->resource<uvw::TimerHandle>();
-    qps_timer->on<uvw::TimerEvent>([qps_flow, rl_list, verbosity, c_count](const auto& event, auto& handle) {
+    auto loop = uvw::loop::get_default();
+    auto qps_timer = loop->resource<uvw::timer_handle>();
+    qps_timer->on<uvw::timer_event>([qps_flow, rl_list, verbosity, c_count](const auto& event, auto& handle) {
         handle.stop();
         flow_change(qps_flow, rl_list, verbosity, c_count);
     });
-    qps_timer->start(uvw::TimerHandle::Time{flow.second}, uvw::TimerHandle::Time{0});
+    qps_timer->start(uvw::timer_handle::time{flow.second}, uvw::timer_handle::time{0});
 }
 
 bool arg_exists(const char *needle, int argc, char *argv[])
@@ -204,12 +204,12 @@ int main(int argc, char *argv[])
         }
     }
 
-    auto loop = uvw::Loop::getDefault();
+    auto loop = uvw::loop::get_default();
 
-    auto sigint = loop->resource<uvw::SignalHandle>();
-    auto sigterm = loop->resource<uvw::SignalHandle>();
-    std::shared_ptr<uvw::TimerHandle> run_timer;
-    std::shared_ptr<uvw::TimerHandle> qgen_loop_timer;
+    auto sigint = loop->resource<uvw::signal_handle>();
+    auto sigterm = loop->resource<uvw::signal_handle>();
+    std::shared_ptr<uvw::timer_handle> run_timer;
+    std::shared_ptr<uvw::timer_handle> qgen_loop_timer;
 
     std::string output_file;
     if (args["-o"]) {
@@ -287,8 +287,8 @@ int main(int argc, char *argv[])
             args["-b"] = std::string("::0");
     }
     auto bind_ip = args["-b"].asString();
-    auto bind_ip_request = loop->resource<uvw::GetAddrInfoReq>();
-    auto bind_ip_resolved = bind_ip_request->addrInfoSync(bind_ip, "0");
+    auto bind_ip_request = loop->resource<uvw::get_addr_info_req>();
+    auto bind_ip_resolved = bind_ip_request->addr_info_sync(bind_ip, "0");
     if (!bind_ip_resolved.first) {
         std::cerr << "unable to resolve bind ip address: " << bind_ip << std::endl;
         return 1;
@@ -312,9 +312,9 @@ int main(int argc, char *argv[])
     }
 
     std::vector<Target> target_list;
-    auto request = loop->resource<uvw::GetAddrInfoReq>();
+    auto request = loop->resource<uvw::get_addr_info_req>();
     for (uint i = 0; i < raw_target_list.size(); i++) {
-        uvw::Addr addr;
+        uvw::socket_address addr;
         struct http_parser_url parsed = {};
         std::string url = raw_target_list[i];
         if(url.rfind("https://", 0) != 0) {
@@ -327,7 +327,7 @@ int main(int argc, char *argv[])
         }
         std::string authority(&url[parsed.field_data[UF_HOST].off], parsed.field_data[UF_HOST].len);
 
-        auto target_resolved = request->addrInfoSync(authority, args["-p"].asString());
+        auto target_resolved = request->addr_info_sync(authority, args["-p"].asString());
         if (!target_resolved.first) {
             std::cerr << "unable to resolve target address: " << authority << std::endl;
             if (raw_target_list[i] == "file") {
@@ -344,11 +344,7 @@ int main(int argc, char *argv[])
             return 1;
         }
 
-        if (family == AF_INET) {
-            addr = uvw::details::address<uvw::IPv4>((struct sockaddr_in *)node->ai_addr);
-        } else if (family == AF_INET6) {
-            addr = uvw::details::address<uvw::IPv6>((struct sockaddr_in6 *)node->ai_addr);
-        }
+        addr = uvw::details::sock_addr(*node->ai_addr);
         target_list.push_back({&parsed, addr.ip, url});
     }
 
@@ -484,29 +480,29 @@ int main(int argc, char *argv[])
         }
     };
 
-    auto stop_traffic = [&](uvw::SignalEvent &, uvw::SignalHandle &) {
+    auto stop_traffic = [&](uvw::signal_event &, uvw::signal_handle &) {
         shutdown();
     };
 
     if (runtime_limit != 0) {
-        run_timer = loop->resource<uvw::TimerHandle>();
-        run_timer->on<uvw::TimerEvent>([&shutdown](const auto &, auto &) { shutdown(); });
-        run_timer->start(uvw::TimerHandle::Time{runtime_limit * 1000}, uvw::TimerHandle::Time{0});
+        run_timer = loop->resource<uvw::timer_handle>();
+        run_timer->on<uvw::timer_event>([&shutdown](const auto &, auto &) { shutdown(); });
+        run_timer->start(uvw::timer_handle::time{runtime_limit * 1000}, uvw::timer_handle::time{0});
     }
 
     if (qgen->loops()) {
-        qgen_loop_timer = loop->resource<uvw::TimerHandle>();
-        qgen_loop_timer->on<uvw::TimerEvent>([&qgen, &shutdown](const auto &, auto &) {
+        qgen_loop_timer = loop->resource<uvw::timer_handle>();
+        qgen_loop_timer->on<uvw::timer_event>([&qgen, &shutdown](const auto &, auto &) {
             if (qgen->finished()) {
                 shutdown();
             } });
-        qgen_loop_timer->start(uvw::TimerHandle::Time{500}, uvw::TimerHandle::Time{500});
+        qgen_loop_timer->start(uvw::timer_handle::time{500}, uvw::timer_handle::time{500});
     }
 
-    sigint->on<uvw::SignalEvent>(stop_traffic);
+    sigint->on<uvw::signal_event>(stop_traffic);
     sigint->start(SIGINT);
 
-    sigterm->on<uvw::SignalEvent>(stop_traffic);
+    sigterm->on<uvw::signal_event>(stop_traffic);
     sigterm->start(SIGTERM);
 
     if (config->verbosity()) {

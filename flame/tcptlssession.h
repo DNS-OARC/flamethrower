@@ -9,7 +9,7 @@ class TCPTLSSession : public TCPSession
 public:
     using handshake_error_cb =  std::function<void()>;
 
-    TCPTLSSession(std::shared_ptr<uvw::TCPHandle> handle,
+    TCPTLSSession(std::shared_ptr<uvw::tcp_handle> handle,
                   TCPSession::malformed_data_cb malformed_data_handler,
                   TCPSession::got_dns_msg_cb got_dns_msg_handler,
                   TCPSession::connection_ready_cb connection_ready_handler,
