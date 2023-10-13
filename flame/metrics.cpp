@@ -43,7 +43,7 @@ void MetricsMgr::start()
     }
     _metric_period_timer = _loop->resource<uvw::TimerHandle>();
     _metric_period_timer->on<uvw::TimerEvent>([this](const auto &, auto &) {
-        this->periodic_stats();
+        periodic_stats();
     });
     _metric_period_timer->start(uvw::TimerHandle::Time{1000}, uvw::TimerHandle::Time{1000});
     _start_time = std::chrono::high_resolution_clock::now();
@@ -67,44 +67,17 @@ void MetricsMgr::header_to_disk()
 {
     json j;
 
-    j["version"] = FLAME_VERSION_NUM;
-    j["cmdline"] = _cmdline;
+    j["type"] = "header";
+    j["schema_version"] = 20221207;
+    j["generator_version"] = FLAME_VERSION_NUM;
+    j["generator_params"] = _cmdline;
     j["start_timestamp"] = _start_ts;
     j["run_id"] = _run_id;
+    j["generator"] = "flamethrower";
+    j["stats_interval"] = 1000000;
+    j["timeout"] = 1000000;
+    j["time_units_per_sec"] = 1000000;
 
-    _metric_file << j << std::endl;
-}
-
-void MetricsMgr::flush_to_disk()
-{
-    update_runtime();
-    json j;
-    j["period_number"] = _aggregate_count;
-    j["total_s_count"] = _agg_total_s_count;
-    j["total_r_count"] = _agg_total_r_count;
-    j["period_timeouts"] = _agg_period_timeouts;
-    j["total_timeouts"] = _agg_total_timeouts;
-    j["period_in_flight"] = _agg_period_in_flight;
-    j["total_bad_count"] = _agg_total_bad_count;
-    j["period_bad_count"] = _agg_period_bad_count;
-    j["total_response_avg_ms"] = _agg_total_response_avg_ms;
-    j["total_response_min_ms"] = _agg_total_response_min_ms;
-    j["total_response_max_ms"] = _agg_total_response_max_ms;
-    j["period_response_avg_ms"] = _agg_period_response_avg_ms;
-    j["period_response_min_ms"] = _agg_period_response_min_ms;
-    j["period_response_max_ms"] = _agg_period_response_max_ms;
-    j["total_qps_r_avg"] = _agg_total_qps_r_avg;
-    j["total_qps_s_avg"] = _agg_total_qps_s_avg;
-    j["total_net_errors"] = _agg_total_net_errors;
-    j["total_tcp_connections"] = _agg_total_tcp_connections;
-    j["total_pkt_size_avg"] = _agg_total_pkt_size_avg;
-    j["period_net_errors"] = _agg_period_net_errors;
-    j["period_pkt_size_avg"] = _agg_period_pkt_size_avg;
-    j["runtime_s"] = _runtime_s;
-    j["run_id"] = _run_id;
-    for (auto i : _response_codes) {
-        j["total_responses"][ldns_lookup_by_id(ldns_rcodes, i.first)->name] = i.second;
-    }
     _metric_file << j << std::endl;
 }
 
@@ -200,11 +173,6 @@ void MetricsMgr::periodic_stats()
         display_periodic_stats();
     }
 
-    // FLUSH
-    if (_metric_file.is_open()) {
-        flush_to_disk();
-    }
-
     // RESET
     // ints
     _agg_period_r_count = _agg_period_s_count = _agg_period_in_flight = _agg_period_timeouts = _agg_period_bad_count = _agg_period_net_errors = _agg_period_tcp_connections = 0;
@@ -235,7 +203,6 @@ void MetricsMgr::finalize()
         display_final_text();
     }
     if (_metric_file.is_open()) {
-        flush_to_disk();
         _metric_file.close();
     }
 }
@@ -248,6 +215,7 @@ void MetricsMgr::aggregate_trafgen(const Metrics *m)
     if (_per_trafgen_metrics && _metric_file.is_open()) {
         // record per trafgen metrics to out file
         json j;
+        j["type"] = "stats_period";
         j["period_number"] = _aggregate_count;
         j["run_id"] = _run_id;
         j["runtime_s"] = _runtime_s;
@@ -304,9 +272,11 @@ void MetricsMgr::aggregate_trafgen(const Metrics *m)
         _response_codes[i.first] += i.second;
     }
 }
+// called only for HTTP
 std::string MetricsMgr::toJSON() const
 {
     json j;
+    j["type"] = "stats_period";
     j["period_number"] = _aggregate_count;
     j["run_id"] = _run_id;
     j["runtime_s"] = _runtime_s;
@@ -387,7 +357,7 @@ void Metrics::toJSON(nlohmann::json &j) const
     j["period_r_count"] = _period_r_count;
 
     j["trafgen_id"] = _trafgen_id;
-    
+
     j["period_timeouts"] = _period_timeouts;
     j["in_flight"] = _in_flight;
     j["period_bad_count"] = _period_bad_count;

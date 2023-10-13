@@ -85,7 +85,7 @@ class MetricsMgr
     bool _per_trafgen_metrics{true};
 
     void header_to_disk();
-    void flush_to_disk();
+//    void flush_to_disk();
     void periodic_stats();
 
     // console display
