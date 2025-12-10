@@ -1,0 +1,1 @@
+option('doh', type: 'boolean', value: true, description: 'Enable DNS-over-HTTPS support.')
