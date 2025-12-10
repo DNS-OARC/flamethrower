@@ -4,14 +4,14 @@
 
 #include "tcpsession.h"
 
-TCPSession::TCPSession(std::shared_ptr<uvw::TCPHandle> handle,
-                       malformed_data_cb malformed_data_handler,
-                       got_dns_msg_cb got_dns_msg_handler,
-                       connection_ready_cb connection_ready_handler)
-    : _handle{handle},
-      _malformed_data{std::move(malformed_data_handler)},
-      _got_dns_msg{std::move(got_dns_msg_handler)},
-      _connection_ready{std::move(connection_ready_handler)}
+TCPSession::TCPSession(std::shared_ptr<uvw::tcp_handle> handle,
+    malformed_data_cb malformed_data_handler,
+    got_dns_msg_cb got_dns_msg_handler,
+    connection_ready_cb connection_ready_handler)
+    : _handle{handle}
+    , _malformed_data{std::move(malformed_data_handler)}
+    , _got_dns_msg{std::move(got_dns_msg_handler)}
+    , _connection_ready{std::move(connection_ready_handler)}
 {
 }
 
@@ -58,15 +58,14 @@ void TCPSession::receive_data(const char data[], size_t len)
 
     _buffer.append(data, len);
 
-    for(;;) {
+    for (;;) {
         std::uint16_t size;
 
         if (_buffer.size() < sizeof(size))
             break;
 
         // size is in network byte order.
-        size = static_cast<unsigned char>(_buffer[1]) |
-               static_cast<unsigned char>(_buffer[0]) << 8;
+        size = static_cast<unsigned char>(_buffer[1]) | static_cast<unsigned char>(_buffer[0]) << 8;
 
         // no need to check the maximum size here since the maximum size
         // that a std::uint16t_t can hold, std::numeric_limits<std::uint16_t>::max()

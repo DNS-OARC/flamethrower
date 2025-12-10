@@ -43,9 +43,9 @@ struct TrafGenConfig {
 #ifdef DOH_ENABLE
     HTTPMethod method{HTTPMethod::POST};
 #endif
-    const Target& next_target()
+    const Target &next_target()
     {
-        const Target& next = target_list[_current_target];
+        const Target &next = target_list[_current_target];
         _current_target++;
         if (_current_target >= target_list.size())
             _current_target = 0;
@@ -56,21 +56,21 @@ struct TrafGenConfig {
 class TrafGen
 {
 
-    std::shared_ptr<uvw::Loop> _loop;
+    std::shared_ptr<uvw::loop> _loop;
     std::shared_ptr<Metrics> _metrics;
     std::shared_ptr<Config> _config;
     std::shared_ptr<TrafGenConfig> _traf_config;
     std::shared_ptr<QueryGenerator> _qgen;
     std::shared_ptr<TokenBucket> _rate_limit;
 
-    std::shared_ptr<uvw::UDPHandle> _udp_handle;
-    std::shared_ptr<uvw::TCPHandle> _tcp_handle;
+    std::shared_ptr<uvw::udp_handle> _udp_handle;
+    std::shared_ptr<uvw::tcp_handle> _tcp_handle;
     std::shared_ptr<TCPSession> _tcp_session;
 
-    std::shared_ptr<uvw::TimerHandle> _sender_timer;
-    std::shared_ptr<uvw::TimerHandle> _timeout_timer;
-    std::shared_ptr<uvw::TimerHandle> _shutdown_timer;
-    std::shared_ptr<uvw::TimerHandle> _finish_session_timer;
+    std::shared_ptr<uvw::timer_handle> _sender_timer;
+    std::shared_ptr<uvw::timer_handle> _timeout_timer;
+    std::shared_ptr<uvw::timer_handle> _shutdown_timer;
+    std::shared_ptr<uvw::timer_handle> _finish_session_timer;
 
     // a hash of in flight queries, keyed by query id
     std::unordered_map<uint16_t, Query> _in_flight;
@@ -92,7 +92,7 @@ class TrafGen
     void start_wait_timer_for_tcp_finish();
 
 public:
-    TrafGen(std::shared_ptr<uvw::Loop> l,
+    TrafGen(std::shared_ptr<uvw::loop> l,
         std::shared_ptr<Metrics> s,
         std::shared_ptr<Config> c,
         std::shared_ptr<TrafGenConfig> tgc,

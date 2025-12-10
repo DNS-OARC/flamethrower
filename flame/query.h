@@ -144,7 +144,7 @@ class StaticQueryGenerator : public QueryGenerator
 
 public:
     StaticQueryGenerator(std::shared_ptr<Config> c)
-        : QueryGenerator(c){};
+        : QueryGenerator(c) { };
 
     void init();
 
@@ -185,7 +185,7 @@ class RandomPktQueryGenerator : public QueryGenerator
 
 public:
     RandomPktQueryGenerator(std::shared_ptr<Config> c)
-        : QueryGenerator(c){};
+        : QueryGenerator(c) { };
 
     void init();
 
@@ -204,7 +204,7 @@ class RandomQNameQueryGenerator : public QueryGenerator
 
 public:
     RandomQNameQueryGenerator(std::shared_ptr<Config> c)
-        : QueryGenerator(c){};
+        : QueryGenerator(c) { };
 
     void init();
 
@@ -223,7 +223,7 @@ class RandomLabelQueryGenerator : public QueryGenerator
 
 public:
     RandomLabelQueryGenerator(std::shared_ptr<Config> c)
-        : QueryGenerator(c){};
+        : QueryGenerator(c) { };
 
     void init();
 
@@ -251,7 +251,7 @@ public:
 
     void init();
 
-    //QueryTpt next_base64url(uint16_t);
+    // QueryTpt next_base64url(uint16_t);
     QueryTpt next_udp(uint16_t);
     QueryTpt next_tcp(const std::vector<uint16_t> &);
 

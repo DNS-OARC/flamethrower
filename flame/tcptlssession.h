@@ -7,13 +7,13 @@
 class TCPTLSSession : public TCPSession
 {
 public:
-    using handshake_error_cb =  std::function<void()>;
+    using handshake_error_cb = std::function<void()>;
 
-    TCPTLSSession(std::shared_ptr<uvw::TCPHandle> handle,
-                  TCPSession::malformed_data_cb malformed_data_handler,
-                  TCPSession::got_dns_msg_cb got_dns_msg_handler,
-                  TCPSession::connection_ready_cb connection_ready_handler,
-                  handshake_error_cb handshake_error_handler);
+    TCPTLSSession(std::shared_ptr<uvw::tcp_handle> handle,
+        TCPSession::malformed_data_cb malformed_data_handler,
+        TCPSession::got_dns_msg_cb got_dns_msg_handler,
+        TCPSession::connection_ready_cb connection_ready_handler,
+        handshake_error_cb handshake_error_handler);
     virtual ~TCPTLSSession();
 
     virtual bool setup();
@@ -31,7 +31,9 @@ protected:
     void do_handshake();
 
 private:
-    enum class LinkState { HANDSHAKE, DATA, CLOSE } _tls_state;
+    enum class LinkState { HANDSHAKE,
+        DATA,
+        CLOSE } _tls_state;
     handshake_error_cb _handshake_error;
     std::string _pull_buffer;
 

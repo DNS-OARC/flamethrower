@@ -152,9 +152,9 @@ QueryGenerator::QueryTpt QueryGenerator::next_base64url(uint16_t id)
     memcpy(buf.get(), w.first, w.second);
     uint16_t _id = ntohs(id);
     memcpy(buf.get(), &_id, sizeof(_id));
-    std::string encoded = base64_encode((unsigned char*) buf.get(), len);
+    std::string encoded = base64_encode((unsigned char *)buf.get(), len);
     size_t encoded_len = encoded.size();
-    auto encoded_buf = std::make_unique<char []>(encoded_len);
+    auto encoded_buf = std::make_unique<char[]>(encoded_len);
     memcpy(encoded_buf.get(), encoded.c_str(), encoded_len);
     return std::make_tuple(std::move(encoded_buf), encoded_len);
 }
@@ -309,14 +309,14 @@ void QueryGenerator::new_rec(uint8_t **dest, size_t *dest_len, const char *qname
         int idx = 0;
         int buflen = optionlen + 4; // add 2 bytes each for option code/optionlen fields
         uint8_t *buf = (uint8_t *)malloc(buflen);
-        buf[idx++] = 0x00; // option-code msb
-        buf[idx++] = 0x08; // option-code lsb
-        buf[idx++] = optionlen >> 16; //option-len msb
-        buf[idx++] = optionlen & 0xFF; // option-len lsb
-        buf[idx++] = 0x00; // family msb
+        buf[idx++] = 0x00;               // option-code msb
+        buf[idx++] = 0x08;               // option-code lsb
+        buf[idx++] = optionlen >> 16;    // option-len msb
+        buf[idx++] = optionlen & 0xFF;   // option-len lsb
+        buf[idx++] = 0x00;               // family msb
         buf[idx++] = ipv6 ? 0x02 : 0x01; // family lsb
-        buf[idx++] = mask; // source preflen
-        buf[idx++] = 0x00; // scope preflen
+        buf[idx++] = mask;               // source preflen
+        buf[idx++] = 0x00;               // scope preflen
         if (ipv6) {
             std::memcpy(&buf[idx], &sa6.sin6_addr, numbytes); // address
         } else {
