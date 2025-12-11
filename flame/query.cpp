@@ -3,6 +3,7 @@
 #include "query.h"
 #include "utils.h"
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <climits>
 #include <cstring>
@@ -219,13 +220,14 @@ static ldns_pkt *new_query(const char *name, size_t name_len, bool name_bin,
         // cap the length to max label length
         name_len = std::min<size_t>(name_len, LDNS_MAX_LABELLEN);
 
-        // construct binary name
-        uint8_t bin[name_len + 2];
-        bin[0] = name_len;
-        memmove(&bin[1], name, name_len);
-        bin[sizeof(bin) - 1] = 0x00;
+        // construct binary name <len><data><root-label>
+        std::array<uint8_t, LDNS_MAX_LABELLEN + 2> buf;
 
-        rr_name = ldns_rdf_new_frm_data(LDNS_RDF_TYPE_DNAME, sizeof(bin), bin);
+        buf[0] = name_len;
+        memcpy(buf.data() + 1, name, name_len);
+        buf[buf.size() - 1] = 0x00;
+
+        rr_name = ldns_rdf_new_frm_data(LDNS_RDF_TYPE_DNAME, buf.size(), buf.data());
     } else {
         rr_name = ldns_dname_new_frm_str(name);
     }
