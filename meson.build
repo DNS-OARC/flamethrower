@@ -10,7 +10,6 @@ project(
 
 libuv = dependency('libuv')
 ldns = dependency('ldns')
-docopt = dependency('docopt')
 gnutls = dependency('gnutls')
 
 nghttp2 = dependency('libnghttp2', 'nghttp2', required: get_option('doh'))
@@ -87,7 +86,6 @@ urlparse = declare_dependency(
   include_directories: urlparse_includes,
 )
 
-
 base64_sources = files(
   '3rd/cpp-base64/src/base64.cpp',
 )
@@ -105,6 +103,25 @@ base64_library = static_library(
 base64 = declare_dependency(
   link_with: [base64_library],
   include_directories: base64_includes,
+)
+
+docopt_includes = include_directories(
+  '3rd/docopt.cpp/include',
+)
+
+docopt_sources = files(
+  '3rd/docopt.cpp/src/docopt.cpp',
+)
+
+docopt_library = static_library(
+  'docopt',
+  docopt_sources,
+  include_directories: docopt_includes,
+)
+
+docopt = declare_dependency(
+  link_with: [docopt_library],
+  include_directories: docopt_includes,
 )
 
 # x
