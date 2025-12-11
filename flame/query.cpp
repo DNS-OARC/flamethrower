@@ -632,9 +632,8 @@ void NumberNameQueryGenerator::init()
     _namedist = std::uniform_int_distribution<>{low, high};
 }
 
-QueryGenerator::QueryTpt NumberNameQueryGenerator::next_tcp(const std::vector<uint16_t> &id_list)
+QueryGenerator::QueryTpt NumberNameQueryGenerator::next_tcp(const std::vector<uint16_t> &id_list [[maybe_unused]])
 {
-
     throw std::runtime_error("tcp unsupported");
 }
 

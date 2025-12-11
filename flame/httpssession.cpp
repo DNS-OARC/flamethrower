@@ -62,7 +62,7 @@ std::unique_ptr<http2_stream_data> HTTPSSession::create_http2_stream_data(std::u
 }
 #define ARRLEN(x) (sizeof(x) / sizeof(x[0]))
 
-static ssize_t send_callback(nghttp2_session *session, const uint8_t *data, size_t length, int flags, void *user_data)
+static ssize_t send_callback(nghttp2_session *, const uint8_t *data, size_t length, int flags [[maybe_unused]], void *user_data)
 {
     auto class_session = static_cast<HTTPSSession *>(user_data);
     class_session->send_tls((void *)data, length);
@@ -93,7 +93,7 @@ void HTTPSSession::process_receive(const uint8_t *data, size_t len)
     _got_dns_msg(std::move(buf), len);
 }
 
-static int on_data_chunk_recv_callback(nghttp2_session *session, uint8_t flags,
+static int on_data_chunk_recv_callback(nghttp2_session *session, uint8_t flags [[maybe_unused]],
     int32_t stream_id, const uint8_t *data,
     size_t len, void *user_data)
 {
@@ -112,7 +112,7 @@ static int on_data_chunk_recv_callback(nghttp2_session *session, uint8_t flags,
     return 0;
 }
 
-static int on_stream_close_callback(nghttp2_session *session, int32_t stream_id, uint32_t error_code, void *user_data)
+static int on_stream_close_callback(nghttp2_session *session, int32_t stream_id, uint32_t error_code [[maybe_unused]], void *user_data [[maybe_unused]])
 {
     auto stream_data = static_cast<http2_stream_data *>(nghttp2_session_get_stream_user_data(session, stream_id));
     if (!stream_data) {
@@ -123,8 +123,7 @@ static int on_stream_close_callback(nghttp2_session *session, int32_t stream_id,
     return 0;
 }
 
-int on_frame_recv_callback(nghttp2_session *session,
-    const nghttp2_frame *frame, void *user_data)
+int on_frame_recv_callback(nghttp2_session *, const nghttp2_frame *frame, void *user_data)
 {
     auto class_session = static_cast<HTTPSSession *>(user_data);
     switch (frame->hd.type) {
@@ -255,7 +254,7 @@ void HTTPSSession::close()
     TCPSession::close();
 }
 
-static ssize_t post_data(nghttp2_session *session, int32_t stream_id, uint8_t *buf, size_t length, uint32_t *data_flags, nghttp2_data_source *source, void *user_data)
+static ssize_t post_data(nghttp2_session *session, int32_t stream_id, uint8_t *buf, size_t length, uint32_t *data_flags, nghttp2_data_source *, void *user_data [[maybe_unused]])
 {
     auto stream_data = static_cast<http2_stream_data *>(nghttp2_session_get_stream_user_data(session, stream_id));
     size_t nread = std::min(stream_data->data.size(), length);

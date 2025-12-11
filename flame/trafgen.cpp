@@ -5,7 +5,6 @@
 #include <memory>
 #include <netinet/in.h>
 #include <random>
-#include <string>
 
 #include "tcptlssession.h"
 #include "trafgen.h"
@@ -81,7 +80,7 @@ void TrafGen::start_udp()
 
     _metrics->trafgen_id(_udp_handle->sock().port);
 
-    _udp_handle->on<uvw::udp_data_event>([this](const uvw::udp_data_event &event, uvw::udp_handle &h) {
+    _udp_handle->on<uvw::udp_data_event>([this](const uvw::udp_data_event &event, uvw::udp_handle &) {
         process_wire(event.data.get(), event.length);
     });
 
@@ -192,7 +191,7 @@ void TrafGen::connect_tcp_events()
     /** SOCKET CALLBACKS **/
 
     // SOCKET: local socket was closed, cleanup resources and possibly restart another connection
-    _tcp_handle->on<uvw::close_event>([this](uvw::close_event &event, uvw::tcp_handle &h) {
+    _tcp_handle->on<uvw::close_event>([this](uvw::close_event &, uvw::tcp_handle &) {
         // if timer is still going (e.g. we got here through EndEvent), cancel it
         if (_finish_session_timer.get()) {
             _finish_session_timer->stop();
@@ -211,7 +210,7 @@ void TrafGen::connect_tcp_events()
     });
 
     // SOCKET: socket error
-    _tcp_handle->on<uvw::error_event>([this](uvw::error_event &event, uvw::tcp_handle &h) {
+    _tcp_handle->on<uvw::error_event>([this](uvw::error_event &event, uvw::tcp_handle &) {
         if (_config->verbosity() > 1) {
             std::cerr << _tcp_handle->sock().ip << ":" << _tcp_handle->sock().port << " - " << event.what() << std::endl;
         }
@@ -221,28 +220,28 @@ void TrafGen::connect_tcp_events()
     });
 
     // INCOMING: remote peer closed connection, EOF
-    _tcp_handle->on<uvw::end_event>([this](uvw::end_event &event, uvw::tcp_handle &h) {
+    _tcp_handle->on<uvw::end_event>([this](uvw::end_event &, uvw::tcp_handle &) {
         _tcp_session->on_end_event();
     });
 
     // OUTGOING: we've finished writing all our data and are shutting down
-    _tcp_handle->on<uvw::shutdown_event>([this](uvw::shutdown_event &event, uvw::tcp_handle &h) {
+    _tcp_handle->on<uvw::shutdown_event>([this](uvw::shutdown_event &, uvw::tcp_handle &) {
         _tcp_session->on_shutdown_event();
     });
 
     // INCOMING: remote peer sends data, pass to session
-    _tcp_handle->on<uvw::data_event>([this](uvw::data_event &event, uvw::tcp_handle &h) {
+    _tcp_handle->on<uvw::data_event>([this](uvw::data_event &event, uvw::tcp_handle &) {
         _tcp_session->receive_data(event.data.get(), event.length);
     });
 
     // OUTGOING: write operation has finished
-    _tcp_handle->on<uvw::write_event>([this](uvw::write_event &event, uvw::tcp_handle &h) {
+    _tcp_handle->on<uvw::write_event>([this](uvw::write_event &, uvw::tcp_handle &) {
         if (!_finish_session_timer)
             start_wait_timer_for_tcp_finish();
     });
 
     // SOCKET: on connect
-    _tcp_handle->on<uvw::connect_event>([this](uvw::connect_event &event, uvw::tcp_handle &h) {
+    _tcp_handle->on<uvw::connect_event>([this](uvw::connect_event &, uvw::tcp_handle &) {
         _tcp_session->on_connect_event();
         _metrics->tcp_connection();
 
@@ -259,8 +258,7 @@ void TrafGen::start_wait_timer_for_tcp_finish()
     auto wait_time_start = std::chrono::high_resolution_clock::now();
     assert(_finish_session_timer.get() == 0);
     _finish_session_timer = _loop->resource<uvw::timer_handle>();
-    _finish_session_timer->on<uvw::timer_event>([this, wait_time_start](const uvw::timer_event &event,
-                                                    uvw::timer_handle &h) {
+    _finish_session_timer->on<uvw::timer_event>([this, wait_time_start](const uvw::timer_event &, uvw::timer_handle &) {
         auto now = std::chrono::high_resolution_clock::now();
         auto cur_wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - wait_time_start).count();
 
@@ -320,7 +318,7 @@ void TrafGen::start()
     if (_traf_config->protocol == Protocol::UDP) {
         start_udp();
         _sender_timer = _loop->resource<uvw::timer_handle>();
-        _sender_timer->on<uvw::timer_event>([this](const uvw::timer_event &event, uvw::timer_handle &h) {
+        _sender_timer->on<uvw::timer_event>([this](const uvw::timer_event &, uvw::timer_handle &) {
             switch (_traf_config->protocol) {
             case Protocol::UDP:
                 udp_send();
@@ -340,7 +338,7 @@ void TrafGen::start()
     }
 
     _timeout_timer = _loop->resource<uvw::timer_handle>();
-    _timeout_timer->on<uvw::timer_event>([this](const uvw::timer_event &event, uvw::timer_handle &h) {
+    _timeout_timer->on<uvw::timer_event>([this](const uvw::timer_event &, uvw::timer_handle &) {
         handle_timeouts();
     });
     _timeout_timer->start(uvw::timer_handle::time{_traf_config->r_timeout * 1000}, uvw::timer_handle::time{1000});
