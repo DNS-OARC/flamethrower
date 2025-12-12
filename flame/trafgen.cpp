@@ -109,7 +109,7 @@ void TrafGen::start_tcp_session()
     int err = _tcp_handle->bind(_traf_config->bind_addr, flags);
     if (err != 0) {
         _metrics->net_error();
-	throw uvw::error_event(err);
+        throw uvw::error_event(err);
     }
 
     _metrics->trafgen_id(_tcp_handle->sock().port);

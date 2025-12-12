@@ -17,9 +17,9 @@
 #include "utils.h"
 #include "version.h"
 
-#include <uvw.hpp>
 #include <httplib.h>
 #include <urlparse.h>
+#include <uvw.hpp>
 
 static const char METRIC_ROUTE[] = "/api/v1/metrics";
 static const char USAGE[] =
