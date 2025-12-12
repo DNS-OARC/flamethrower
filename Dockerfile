@@ -1,29 +1,26 @@
-FROM debian:bullseye-slim AS build
-
-ENV BUILD_DEPS "g++ cmake make libldns-dev libnghttp2-dev libuv1-dev libgnutls28-dev pkgconf"
-ENV DEBIAN_FRONTEND=noninteractive
+FROM registry.fedoraproject.org/fedora-minimal:43 AS build
 
 RUN \
-    apt-get update && \
-    apt-get install --yes --no-install-recommends ${BUILD_DEPS}
+  dnf --setopt=install_weak_deps=False --no-docs --assumeyes install \
+    gcc g++ meson pkgconf ninja-build redhat-rpm-config \
+    ldns-devel libuv-devel gnutls-devel libnghttp2-devel \
+  && dnf clean all
 
-COPY . /src
-
-RUN \
-    mkdir /tmp/build && \
-    cd /tmp/build && \
-    cmake -DDOH_ENABLE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo /src && \
-    make all
-
-FROM debian:bullseye-slim AS runtime
-
-ENV RUNTIME_DEPS "libldns3 libuv1 nghttp2"
+COPY . /mnt/src
 
 RUN \
-    apt-get update && \
-    apt-get install --yes --no-install-recommends ${RUNTIME_DEPS} && \
-    rm -rf /var/lib/apt
+  mkdir /mnt/build \
+  && cd /mnt/build \
+  && meson setup /mnt/src \
+  && ninja
 
-COPY --from=build /tmp/build/flame /usr/local/bin/flame
+FROM registry.fedoraproject.org/fedora-minimal:43 AS runtime
 
-ENTRYPOINT [ "/usr/local/bin/flame" ]
+RUN \
+  dnf --setopt=install_weak_deps=False --no-docs --assumeyes install \
+    ldns libuv gnutls libnghttp2 \
+  && dnf clean all
+
+COPY --from=build /mnt/build/flame /usr/local/bin/flame
+
+ENTRYPOINT ["/usr/local/bin/flame"]
