@@ -173,5 +173,6 @@ flame = executable(
   flame_sources,
   dependencies: flame_deps,
   include_directories: include_directories('flame'),
+  cpp_args: ['-DHAVE_STDBOOL_H'], # workaround for ldns re-defining bool type
   install: true,
 )
