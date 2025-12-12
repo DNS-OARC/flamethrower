@@ -20,3 +20,21 @@ install -m 0644 "$SRCDIR"/docopt.cpp "$DESTDIR/src"
 install -m 0644 "$SRCDIR"/docopt*.h "$DESTDIR/include"
 
 git --git-dir "$SRCDIR/.git" --work-tree "$SRCDIR" rev-parse HEAD | tee "$DESTDIR/VERSION"
+
+# patch to fix build with LLVM and C++23
+patch -d "$DESTDIR" -p0 <<"EOF"
+diff --git src/docopt.cpp src/docopt.cpp
+--- src/docopt.cpp
++++ src/docopt.cpp
+@@ -12,9 +12,9 @@
+
+ #include "docopt_value.h"
+
++#include <algorithm>
+ #include <vector>
+ #include <unordered_set>
+-#include <unordered_map>
+ #include <map>
+ #include <string>
+ #include <iostream>
+"EOF"

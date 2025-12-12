@@ -12,9 +12,9 @@
 
 #include "docopt_value.h"
 
+#include <algorithm>
 #include <vector>
 #include <unordered_set>
-#include <unordered_map>
 #include <map>
 #include <string>
 #include <iostream>
