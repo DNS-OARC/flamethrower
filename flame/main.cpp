@@ -155,7 +155,7 @@ void flow_change(std::queue<std::pair<uint64_t, uint64_t>> qps_flow,
         return;
     auto loop = uvw::loop::get_default();
     auto qps_timer = loop->resource<uvw::timer_handle>();
-    qps_timer->on<uvw::timer_event>([qps_flow, rl_list, verbosity, c_count](const auto &event, auto &handle) {
+    qps_timer->on<uvw::timer_event>([qps_flow, rl_list, verbosity, c_count](uvw::timer_event &, uvw::timer_handle &handle) {
         handle.stop();
         flow_change(qps_flow, rl_list, verbosity, c_count);
     });
@@ -174,8 +174,7 @@ bool arg_exists(const char *needle, int argc, char *argv[])
 
 void setupRoutes(const MetricsMgr *metricsManager, httplib::Server &svr)
 {
-
-    svr.Get(METRIC_ROUTE, [metricsManager](const httplib::Request &req, httplib::Response &res) {
+    svr.Get(METRIC_ROUTE, [metricsManager](const httplib::Request &, httplib::Response &res) {
         std::string out;
         try {
             out = metricsManager->toJSON();
