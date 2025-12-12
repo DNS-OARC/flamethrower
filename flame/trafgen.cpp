@@ -1,13 +1,17 @@
 // Copyright 2017 NSONE, Inc
 
+#include "trafgen.h"
+
 #include <algorithm>
 #include <iostream>
 #include <memory>
 #include <netinet/in.h>
 #include <random>
 
+#include "tcp.h"
 #include "tcptlssession.h"
-#include "trafgen.h"
+
+#include <uvw/emitter.h>
 
 TrafGen::TrafGen(std::shared_ptr<uvw::loop> l,
     std::shared_ptr<Metrics> s,
@@ -63,19 +67,17 @@ void TrafGen::process_wire(const char data[], size_t len)
 
 void TrafGen::start_udp()
 {
+    _udp_handle = _loop->resource<uvw::udp_handle>();
 
-    _udp_handle = _loop->resource<uvw::udp_handle>(_traf_config->family);
+    auto flags = uvw::udp_handle::udp_flags{0};
+    if (_traf_config->bind_addr.family() == AF_INET6) {
+        flags = uvw::udp_handle::udp_flags::IPV6ONLY;
+    }
 
-    _udp_handle->on<uvw::error_event>([this](const uvw::error_event &e, uvw::udp_handle &) {
-        if (0 == strcmp(e.name(), "EADDRNOTAVAIL"))
-            throw std::runtime_error("unable to bind to ip address: " + _traf_config->bind_ip);
+    int err = _udp_handle->bind(_traf_config->bind_addr, flags);
+    if (err != 0) {
         _metrics->net_error();
-    });
-
-    if (_traf_config->family == AF_INET) {
-        _udp_handle->bind(_traf_config->bind_ip, 0);
-    } else {
-        _udp_handle->bind(_traf_config->bind_ip, 0, uvw::udp_handle::udp_flags::IPV6ONLY);
+        throw uvw::error_event(err);
     }
 
     _metrics->trafgen_id(_udp_handle->sock().port);
@@ -89,19 +91,25 @@ void TrafGen::start_udp()
 
 void TrafGen::start_tcp_session()
 {
-
     assert(_tcp_handle.get() == 0);
     assert(_tcp_session.get() == 0);
     assert(_finish_session_timer.get() == 0);
+
     Target current_target = _traf_config->next_target();
-    _tcp_handle = _loop->resource<uvw::tcp_handle>(_traf_config->family);
+
+    _tcp_handle = _loop->resource<uvw::tcp_handle>();
 
     connect_tcp_events();
 
-    if (_traf_config->family == AF_INET) {
-        _tcp_handle->bind(_traf_config->bind_ip, 0);
-    } else {
-        _tcp_handle->bind(_traf_config->bind_ip, 0, uvw::tcp_handle::tcp_flags::IPV6ONLY);
+    auto flags = uvw::tcp_handle::tcp_flags{0};
+    if (_traf_config->bind_addr.family() == AF_INET6) {
+        flags = uvw::tcp_handle::tcp_flags::IPV6ONLY;
+    }
+
+    int err = _tcp_handle->bind(_traf_config->bind_addr, flags);
+    if (err != 0) {
+        _metrics->net_error();
+	throw uvw::error_event(err);
     }
 
     _metrics->trafgen_id(_tcp_handle->sock().port);
@@ -183,7 +191,7 @@ void TrafGen::start_tcp_session()
     }
 
     // fires ConnectEvent when connected
-    _tcp_handle->connect(reinterpret_cast<const sockaddr &>(current_target.address));
+    _tcp_handle->connect(current_target.address);
 }
 
 void TrafGen::connect_tcp_events()
@@ -304,9 +312,7 @@ void TrafGen::udp_send()
         _free_id_list.pop_back();
         assert(_in_flight.find(id) == _in_flight.end());
         auto qt = _qgen->next_udp(id);
-        _udp_handle->send(reinterpret_cast<const sockaddr &>(_traf_config->next_target().address),
-            std::move(std::get<0>(qt)),
-            std::get<1>(qt));
+        _udp_handle->send(_traf_config->next_target().address, std::move(std::get<0>(qt)), std::get<1>(qt));
         _metrics->send(std::get<1>(qt), 1, _in_flight.size());
         _in_flight[id].send_time = std::chrono::high_resolution_clock::now();
     }

@@ -1,29 +1,24 @@
 // Copyright 2017 NSONE, Inc
 
 #include <iostream>
-#include <iterator>
 #include <map>
 #include <queue>
-#include <sstream>
 #include <string>
 #include <uv.h>
 #include <vector>
 
-#include <httplib.h>
-
+#include "addr.h"
 #include "config.h"
 #include "docopt.h"
 #include "http.h"
 #include "metrics.h"
 #include "query.h"
 #include "trafgen.h"
-#include "util.h"
 #include "utils.h"
-
-#include <uvw.hpp>
-
 #include "version.h"
 
+#include <uvw.hpp>
+#include <httplib.h>
 #include <urlparse.h>
 
 static const char METRIC_ROUTE[] = "/api/v1/metrics";
@@ -289,6 +284,7 @@ int main(int argc, char *argv[])
         std::cerr << "unable to resolve bind ip address: " << bind_ip << std::endl;
         return 1;
     }
+    flame::socket_address bind_addr(*bind_ip_resolved.second->ai_addr, bind_ip_resolved.second->ai_addrlen);
 
     std::vector<std::string> raw_target_list;
     if (args["TARGET"].asString() == "file" && args["--targets"]) {
@@ -310,7 +306,6 @@ int main(int argc, char *argv[])
     std::vector<Target> target_list;
     auto request = loop->resource<uvw::get_addr_info_req>();
     for (uint i = 0; i < raw_target_list.size(); i++) {
-        sockaddr_storage addr{};
         struct urlparse_url parsed = {};
         std::string url = raw_target_list[i];
         if (url.rfind("https://", 0) != 0) {
@@ -340,7 +335,7 @@ int main(int argc, char *argv[])
             return 1;
         }
 
-        memcpy(&addr, node->ai_addr, node->ai_addrlen);
+        flame::socket_address addr(*node->ai_addr, node->ai_addrlen);
         target_list.push_back({parsed, addr, url});
     }
 
@@ -419,8 +414,7 @@ int main(int argc, char *argv[])
 
     auto traf_config = std::make_shared<TrafGenConfig>();
     traf_config->batch_count = b_count;
-    traf_config->family = family;
-    traf_config->bind_ip = bind_ip;
+    traf_config->bind_addr = bind_addr;
     traf_config->target_list = target_list;
     traf_config->port = static_cast<unsigned int>(args["-p"].asLong());
     traf_config->s_delay = s_delay;
@@ -502,7 +496,7 @@ int main(int argc, char *argv[])
     sigterm->start(SIGTERM);
 
     if (config->verbosity()) {
-        std::cout << "binding traffic generators to " << traf_config->bind_ip << std::endl;
+        std::cout << "binding traffic generators to " << traf_config->bind_addr.ip_str() << std::endl;
         std::cout << "flaming target(s) [";
         for (uint i = 0; i < 3; i++) {
             // FIXME

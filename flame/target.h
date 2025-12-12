@@ -2,12 +2,12 @@
 
 #include <string>
 
-#include <sys/socket.h>
+#include "addr.h"
 
 #include <urlparse.h>
 
 struct Target {
     urlparse_url parsed;
-    sockaddr_storage address;
+    flame::socket_address address;
     std::string uri;
 };

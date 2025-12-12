@@ -13,6 +13,7 @@
 #include "httpssession.h"
 #endif
 
+#include "addr.h"
 #include "metrics.h"
 #include "query.h"
 #include "target.h"
@@ -33,9 +34,8 @@ enum class Protocol {
 struct TrafGenConfig {
     std::vector<Target> target_list;
     unsigned int _current_target{0};
-    int family{0};
-    std::string bind_ip;
-    unsigned int port{53};
+    flame::socket_address bind_addr;
+    uint16_t port{53};
     int r_timeout{3};
     long s_delay{1};
     long batch_count{10};

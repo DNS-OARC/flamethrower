@@ -127,6 +127,7 @@ docopt = declare_dependency(
 # x
 
 flame_sources = files(
+  'flame/addr.cpp',
   'flame/metrics.cpp',
   'flame/metrics.h',
   'flame/query.cpp',
@@ -171,5 +172,6 @@ flame = executable(
   'flame',
   flame_sources,
   dependencies: flame_deps,
+  include_directories: include_directories('flame'),
   install: true,
 )
