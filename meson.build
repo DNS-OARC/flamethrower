@@ -156,13 +156,19 @@ flame_deps = [
   base64,
 ]
 
+flame_args = [
+  '-DHAVE_STDBOOL_H', # workaround for ldns re-defining bool type
+]
+
 if get_option('doh')
   flame_sources += [
     'flame/http.h',
     'flame/httpssession.cpp',
     'flame/httpssession.h',
   ]
-
+  flame_args += [
+    '-DDOH_ENABLE'
+  ]
   flame_deps += [
     nghttp2,
   ]
@@ -172,7 +178,7 @@ flame = executable(
   'flame',
   flame_sources,
   dependencies: flame_deps,
+  cpp_args: flame_args,
   include_directories: include_directories('flame'),
-  cpp_args: ['-DHAVE_STDBOOL_H'], # workaround for ldns re-defining bool type
   install: true,
 )
