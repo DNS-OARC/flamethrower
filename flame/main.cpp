@@ -233,7 +233,7 @@ int main(int argc, char *argv[])
         if (!arg_exists("-q", argc, argv))
             b_count = 100;
         if (!arg_exists("-c", argc, argv))
-            c_count = 30;
+            c_count = 10;
     } else if (args["-P"].asString() == "udp") {
         proto = Protocol::UDP;
     } else {
