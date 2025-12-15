@@ -3,6 +3,7 @@
 #include "query.h"
 #include "utils.h"
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <climits>
 #include <cstring>
@@ -152,9 +153,9 @@ QueryGenerator::QueryTpt QueryGenerator::next_base64url(uint16_t id)
     memcpy(buf.get(), w.first, w.second);
     uint16_t _id = ntohs(id);
     memcpy(buf.get(), &_id, sizeof(_id));
-    std::string encoded = base64_encode((unsigned char*) buf.get(), len);
+    std::string encoded = base64_encode((unsigned char *)buf.get(), len);
     size_t encoded_len = encoded.size();
-    auto encoded_buf = std::make_unique<char []>(encoded_len);
+    auto encoded_buf = std::make_unique<char[]>(encoded_len);
     memcpy(encoded_buf.get(), encoded.c_str(), encoded_len);
     return std::make_tuple(std::move(encoded_buf), encoded_len);
 }
@@ -219,13 +220,14 @@ static ldns_pkt *new_query(const char *name, size_t name_len, bool name_bin,
         // cap the length to max label length
         name_len = std::min<size_t>(name_len, LDNS_MAX_LABELLEN);
 
-        // construct binary name
-        uint8_t bin[name_len + 2];
-        bin[0] = name_len;
-        memmove(&bin[1], name, name_len);
-        bin[sizeof(bin) - 1] = 0x00;
+        // construct binary name <len><data><root-label>
+        std::array<uint8_t, LDNS_MAX_LABELLEN + 2> buf;
 
-        rr_name = ldns_rdf_new_frm_data(LDNS_RDF_TYPE_DNAME, sizeof(bin), bin);
+        buf[0] = name_len;
+        memcpy(buf.data() + 1, name, name_len);
+        buf[buf.size() - 1] = 0x00;
+
+        rr_name = ldns_rdf_new_frm_data(LDNS_RDF_TYPE_DNAME, buf.size(), buf.data());
     } else {
         rr_name = ldns_dname_new_frm_str(name);
     }
@@ -309,14 +311,14 @@ void QueryGenerator::new_rec(uint8_t **dest, size_t *dest_len, const char *qname
         int idx = 0;
         int buflen = optionlen + 4; // add 2 bytes each for option code/optionlen fields
         uint8_t *buf = (uint8_t *)malloc(buflen);
-        buf[idx++] = 0x00; // option-code msb
-        buf[idx++] = 0x08; // option-code lsb
-        buf[idx++] = optionlen >> 16; //option-len msb
-        buf[idx++] = optionlen & 0xFF; // option-len lsb
-        buf[idx++] = 0x00; // family msb
+        buf[idx++] = 0x00;               // option-code msb
+        buf[idx++] = 0x08;               // option-code lsb
+        buf[idx++] = optionlen >> 16;    // option-len msb
+        buf[idx++] = optionlen & 0xFF;   // option-len lsb
+        buf[idx++] = 0x00;               // family msb
         buf[idx++] = ipv6 ? 0x02 : 0x01; // family lsb
-        buf[idx++] = mask; // source preflen
-        buf[idx++] = 0x00; // scope preflen
+        buf[idx++] = mask;               // source preflen
+        buf[idx++] = 0x00;               // scope preflen
         if (ipv6) {
             std::memcpy(&buf[idx], &sa6.sin6_addr, numbytes); // address
         } else {
@@ -630,9 +632,8 @@ void NumberNameQueryGenerator::init()
     _namedist = std::uniform_int_distribution<>{low, high};
 }
 
-QueryGenerator::QueryTpt NumberNameQueryGenerator::next_tcp(const std::vector<uint16_t> &id_list)
+QueryGenerator::QueryTpt NumberNameQueryGenerator::next_tcp(const std::vector<uint16_t> &id_list [[maybe_unused]])
 {
-
     throw std::runtime_error("tcp unsupported");
 }
 

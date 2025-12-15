@@ -10,4 +10,4 @@ void split(const std::string &s, char delim, Out result);
 
 std::vector<std::string> split(const std::string &s, char delim);
 
-#endif //FLAMETHROWER_UTILS_H
+#endif // FLAMETHROWER_UTILS_H

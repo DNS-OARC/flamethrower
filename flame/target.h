@@ -1,12 +1,13 @@
-#ifndef FLAMETHROWER_TARGET_H
-#define FLAMETHROWER_TARGET_H
+#pragma once
 
-struct http_parser_url;
+#include <string>
+
+#include "addr.h"
+
+#include <urlparse.h>
 
 struct Target {
-    http_parser_url* parsed;
-    std::string address;
+    urlparse_url parsed;
+    flame::socket_address address;
     std::string uri;
 };
-
-#endif //FLAMETHROWER_TARGET_H

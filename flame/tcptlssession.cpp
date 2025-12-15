@@ -6,23 +6,24 @@
 
 static ssize_t gnutls_pull_trampoline(gnutls_transport_ptr_t h, void *buf, size_t len)
 {
-    auto session = static_cast<TCPTLSSession*>(h);
+    auto session = static_cast<TCPTLSSession *>(h);
     return session->gnutls_pull(buf, len);
 }
 
 static ssize_t gnutls_push_trampoline(gnutls_transport_ptr_t h, const void *buf, size_t len)
 {
-    auto session = static_cast<TCPTLSSession*>(h);
+    auto session = static_cast<TCPTLSSession *>(h);
     return session->gnutls_push(buf, len);
 }
 
-TCPTLSSession::TCPTLSSession(std::shared_ptr<uvw::TCPHandle> handle,
-                             TCPSession::malformed_data_cb malformed_data_handler,
-                             TCPSession::got_dns_msg_cb got_dns_msg_handler,
-                             TCPSession::connection_ready_cb connection_ready_handler,
-                             handshake_error_cb handshake_error_handler)
-    : TCPSession(handle, malformed_data_handler, got_dns_msg_handler, connection_ready_handler),
-      _tls_state{LinkState::HANDSHAKE}, _handshake_error{handshake_error_handler}
+TCPTLSSession::TCPTLSSession(std::shared_ptr<uvw::tcp_handle> handle,
+    TCPSession::malformed_data_cb malformed_data_handler,
+    TCPSession::got_dns_msg_cb got_dns_msg_handler,
+    TCPSession::connection_ready_cb connection_ready_handler,
+    handshake_error_cb handshake_error_handler)
+    : TCPSession(handle, malformed_data_handler, got_dns_msg_handler, connection_ready_handler)
+    , _tls_state{LinkState::HANDSHAKE}
+    , _handshake_error{handshake_error_handler}
 {
 }
 
@@ -61,7 +62,7 @@ bool TCPTLSSession::setup()
     }
 
     ret = gnutls_credentials_set(_gnutls_session, GNUTLS_CRD_CERTIFICATE,
-                                 _gnutls_cert_credentials);
+        _gnutls_cert_credentials);
     if (ret < 0) {
         std::cerr << "GNUTLS failed to set system credentials" << gnutls_strerror(ret) << std::endl;
         return false;
@@ -90,7 +91,7 @@ void TCPTLSSession::close()
 void TCPTLSSession::receive_data(const char data[], size_t len)
 {
     _pull_buffer.append(data, len);
-    switch(_tls_state) {
+    switch (_tls_state) {
     case LinkState::HANDSHAKE:
         do_handshake();
         break;
@@ -132,12 +133,10 @@ void TCPTLSSession::write(std::unique_ptr<char[]> data, size_t len)
         if (sent < 0) {
             std::cerr << "Error in sending data: " << gnutls_strerror(sent) << std::endl;
             return;
-        }
-        else {
+        } else {
             pos += static_cast<size_t>(sent);
         }
-    }
-    while (pos < len);
+    } while (pos < len);
 }
 
 void TCPTLSSession::do_handshake()

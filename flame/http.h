@@ -6,4 +6,4 @@ enum class HTTPMethod {
     GET,
 };
 
-#endif //FLAMETHROWER_HTTP_H
+#endif // FLAMETHROWER_HTTP_H

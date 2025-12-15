@@ -3,6 +3,7 @@
 #include <iostream>
 
 #include "httpssession.h"
+#include "urlparse.h"
 
 static ssize_t gnutls_pull_trampoline(gnutls_transport_ptr_t h, void *buf, size_t len)
 {
@@ -16,7 +17,7 @@ static ssize_t gnutls_push_trampoline(gnutls_transport_ptr_t h, const void *buf,
     return session->gnutls_push(buf, len);
 }
 
-HTTPSSession::HTTPSSession(std::shared_ptr<uvw::TCPHandle> handle,
+HTTPSSession::HTTPSSession(std::shared_ptr<uvw::tcp_handle> handle,
     TCPSession::malformed_data_cb malformed_data_handler,
     TCPSession::got_dns_msg_cb got_dns_msg_handler,
     TCPSession::connection_ready_cb connection_ready_handler,
@@ -46,10 +47,10 @@ HTTPSSession::~HTTPSSession()
 std::unique_ptr<http2_stream_data> HTTPSSession::create_http2_stream_data(std::unique_ptr<char[]> data, size_t len)
 {
     std::string uri = _target.uri;
-    struct http_parser_url *u = _target.parsed;
-    std::string scheme(&uri[u->field_data[UF_SCHEMA].off], u->field_data[UF_SCHEMA].len);
-    std::string authority(&uri[u->field_data[UF_HOST].off], u->field_data[UF_HOST].len);
-    std::string path(&uri[u->field_data[UF_PATH].off], u->field_data[UF_PATH].len);
+    urlparse_url *u = &_target.parsed;
+    std::string scheme(&uri[u->field_data[URLPARSE_SCHEMA].off], u->field_data[URLPARSE_SCHEMA].len);
+    std::string authority(&uri[u->field_data[URLPARSE_HOST].off], u->field_data[URLPARSE_HOST].len);
+    std::string path(&uri[u->field_data[URLPARSE_PATH].off], u->field_data[URLPARSE_PATH].len);
     int32_t stream_id = -1;
     if (_method == HTTPMethod::GET) {
         path.append("?dns=");
@@ -61,7 +62,7 @@ std::unique_ptr<http2_stream_data> HTTPSSession::create_http2_stream_data(std::u
 }
 #define ARRLEN(x) (sizeof(x) / sizeof(x[0]))
 
-static ssize_t send_callback(nghttp2_session *session, const uint8_t *data, size_t length, int flags, void *user_data)
+static ssize_t send_callback(nghttp2_session *, const uint8_t *data, size_t length, int flags [[maybe_unused]], void *user_data)
 {
     auto class_session = static_cast<HTTPSSession *>(user_data);
     class_session->send_tls((void *)data, length);
@@ -92,7 +93,7 @@ void HTTPSSession::process_receive(const uint8_t *data, size_t len)
     _got_dns_msg(std::move(buf), len);
 }
 
-static int on_data_chunk_recv_callback(nghttp2_session *session, uint8_t flags,
+static int on_data_chunk_recv_callback(nghttp2_session *session, uint8_t flags [[maybe_unused]],
     int32_t stream_id, const uint8_t *data,
     size_t len, void *user_data)
 {
@@ -111,7 +112,7 @@ static int on_data_chunk_recv_callback(nghttp2_session *session, uint8_t flags,
     return 0;
 }
 
-static int on_stream_close_callback(nghttp2_session *session, int32_t stream_id, uint32_t error_code, void *user_data)
+static int on_stream_close_callback(nghttp2_session *session, int32_t stream_id, uint32_t error_code [[maybe_unused]], void *user_data [[maybe_unused]])
 {
     auto stream_data = static_cast<http2_stream_data *>(nghttp2_session_get_stream_user_data(session, stream_id));
     if (!stream_data) {
@@ -122,19 +123,18 @@ static int on_stream_close_callback(nghttp2_session *session, int32_t stream_id,
     return 0;
 }
 
-int on_frame_recv_callback(nghttp2_session *session,
-    const nghttp2_frame *frame, void *user_data)
+int on_frame_recv_callback(nghttp2_session *, const nghttp2_frame *frame, void *user_data)
 {
     auto class_session = static_cast<HTTPSSession *>(user_data);
     switch (frame->hd.type) {
-        case NGHTTP2_SETTINGS:
-            class_session->settings_received();
-            break;
-        case NGHTTP2_DATA:
-            if (frame->hd.flags & NGHTTP2_FLAG_END_STREAM) {
-                auto data = class_session->_recv_chunks[frame->data.hd.stream_id];
-                class_session->process_receive(data.data(), data.size());
-            }
+    case NGHTTP2_SETTINGS:
+        class_session->settings_received();
+        break;
+    case NGHTTP2_DATA:
+        if (frame->hd.flags & NGHTTP2_FLAG_END_STREAM) {
+            auto data = class_session->_recv_chunks[frame->data.hd.stream_id];
+            class_session->process_receive(data.data(), data.size());
+        }
     }
     return 0;
 }
@@ -254,7 +254,7 @@ void HTTPSSession::close()
     TCPSession::close();
 }
 
-static ssize_t post_data(nghttp2_session *session, int32_t stream_id, uint8_t *buf, size_t length, uint32_t *data_flags, nghttp2_data_source *source, void *user_data)
+static ssize_t post_data(nghttp2_session *session, int32_t stream_id, uint8_t *buf, size_t length, uint32_t *data_flags, nghttp2_data_source *, void *user_data [[maybe_unused]])
 {
     auto stream_data = static_cast<http2_stream_data *>(nghttp2_session_get_stream_user_data(session, stream_id));
     size_t nread = std::min(stream_data->data.size(), length);
@@ -266,8 +266,7 @@ static ssize_t post_data(nghttp2_session *session, int32_t stream_id, uint8_t *b
 #define HDR_S(NAME, VALUE)                                                         \
     {                                                                              \
         (uint8_t *)NAME, (uint8_t *)VALUE.c_str(), sizeof(NAME) - 1, VALUE.size(), \
-            NGHTTP2_NV_FLAG_NONE                                                   \
-    }
+        NGHTTP2_NV_FLAG_NONE}
 
 void HTTPSSession::write(std::unique_ptr<char[]> data, size_t len)
 {

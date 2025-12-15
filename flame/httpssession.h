@@ -8,11 +8,7 @@
 #include "base64.h"
 #endif
 
-#ifdef USE_HTTP_PARSER
-#include <http_parser.h>
-#else
-#include <url_parser.h>
-#endif
+#include <urlparse.h>
 
 #include "http.h"
 #include "target.h"
@@ -39,13 +35,12 @@ enum STATE_HTTP2 {
     SENDING_DATA
 };
 
-class HTTPSSession : public TCPSession
-{
+class HTTPSSession : public TCPSession {
 public:
     using log_send_cb = std::function<void(int32_t id)>;
     using handshake_error_cb = std::function<void()>;
 
-    HTTPSSession(std::shared_ptr<uvw::TCPHandle> handle,
+    HTTPSSession(std::shared_ptr<uvw::tcp_handle> handle,
         TCPSession::malformed_data_cb malformed_data_handler,
         TCPSession::got_dns_msg_cb got_dns_msg_handler,
         TCPSession::connection_ready_cb connection_ready_handler,
@@ -80,6 +75,7 @@ public:
     void settings_received();
 
     std::unordered_map<int32_t, std::vector<uint8_t>> _recv_chunks;
+
 protected:
     void destroy_stream();
     void destroy_session();
@@ -89,7 +85,7 @@ private:
     STATE_HTTP2 http2_state;
     malformed_data_cb _malformed_data;
     got_dns_msg_cb _got_dns_msg;
-    std::shared_ptr<uvw::TCPHandle> _handle;
+    std::shared_ptr<uvw::tcp_handle> _handle;
     enum class LinkState { HANDSHAKE,
         DATA,
         CLOSE } _tls_state;

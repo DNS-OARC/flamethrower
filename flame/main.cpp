@@ -1,15 +1,13 @@
 // Copyright 2017 NSONE, Inc
 
 #include <iostream>
-#include <iterator>
 #include <map>
 #include <queue>
-#include <sstream>
 #include <string>
+#include <uv.h>
 #include <vector>
 
-#include <httplib.h>
-
+#include "addr.h"
 #include "config.h"
 #include "docopt.h"
 #include "http.h"
@@ -17,16 +15,11 @@
 #include "query.h"
 #include "trafgen.h"
 #include "utils.h"
-
-#include <uvw.hpp>
-
 #include "version.h"
 
-#ifdef USE_HTTP_PARSER
-#include <http_parser.h>
-#else
-#include <url_parser.h>
-#endif
+#include <httplib.h>
+#include <urlparse.h>
+#include <uvw.hpp>
 
 static const char METRIC_ROUTE[] = "/api/v1/metrics";
 static const char USAGE[] =
@@ -155,13 +148,13 @@ void flow_change(std::queue<std::pair<uint64_t, uint64_t>> qps_flow,
     }
     if (qps_flow.size() == 0)
         return;
-    auto loop = uvw::Loop::getDefault();
-    auto qps_timer = loop->resource<uvw::TimerHandle>();
-    qps_timer->on<uvw::TimerEvent>([qps_flow, rl_list, verbosity, c_count](const auto& event, auto& handle) {
+    auto loop = uvw::loop::get_default();
+    auto qps_timer = loop->resource<uvw::timer_handle>();
+    qps_timer->on<uvw::timer_event>([qps_flow, rl_list, verbosity, c_count](uvw::timer_event &, uvw::timer_handle &handle) {
         handle.stop();
         flow_change(qps_flow, rl_list, verbosity, c_count);
     });
-    qps_timer->start(uvw::TimerHandle::Time{flow.second}, uvw::TimerHandle::Time{0});
+    qps_timer->start(uvw::timer_handle::time{flow.second}, uvw::timer_handle::time{0});
 }
 
 bool arg_exists(const char *needle, int argc, char *argv[])
@@ -174,10 +167,9 @@ bool arg_exists(const char *needle, int argc, char *argv[])
     return false;
 }
 
-void setupRoutes(const MetricsMgr* metricsManager, httplib::Server &svr)
+void setupRoutes(const MetricsMgr *metricsManager, httplib::Server &svr)
 {
-
-    svr.Get(METRIC_ROUTE, [metricsManager](const httplib::Request &req, httplib::Response &res) {
+    svr.Get(METRIC_ROUTE, [metricsManager](const httplib::Request &, httplib::Response &res) {
         std::string out;
         try {
             out = metricsManager->toJSON();
@@ -187,7 +179,6 @@ void setupRoutes(const MetricsMgr* metricsManager, httplib::Server &svr)
             res.set_content(e.what(), "text/plain");
         }
     });
-
 }
 
 int main(int argc, char *argv[])
@@ -204,12 +195,12 @@ int main(int argc, char *argv[])
         }
     }
 
-    auto loop = uvw::Loop::getDefault();
+    auto loop = uvw::loop::get_default();
 
-    auto sigint = loop->resource<uvw::SignalHandle>();
-    auto sigterm = loop->resource<uvw::SignalHandle>();
-    std::shared_ptr<uvw::TimerHandle> run_timer;
-    std::shared_ptr<uvw::TimerHandle> qgen_loop_timer;
+    auto sigint = loop->resource<uvw::signal_handle>();
+    auto sigterm = loop->resource<uvw::signal_handle>();
+    std::shared_ptr<uvw::timer_handle> run_timer;
+    std::shared_ptr<uvw::timer_handle> qgen_loop_timer;
 
     std::string output_file;
     if (args["-o"]) {
@@ -230,8 +221,8 @@ int main(int argc, char *argv[])
 #ifdef DOH_ENABLE
             proto = Protocol::DOH;
 #else
-			std::cerr << "DNS over HTTPS (DoH) support is not enabled" << std::endl;
-			return 1;
+            std::cerr << "DNS over HTTPS (DoH) support is not enabled" << std::endl;
+            return 1;
 #endif
         } else {
             proto = Protocol::TCP;
@@ -262,7 +253,7 @@ int main(int argc, char *argv[])
 
 #ifdef DOH_ENABLE
     HTTPMethod method{HTTPMethod::GET};
-    if(args["-M"].asString() == "POST") {
+    if (args["-M"].asString() == "POST") {
         method = HTTPMethod::POST;
     }
 #endif
@@ -287,12 +278,13 @@ int main(int argc, char *argv[])
             args["-b"] = std::string("::0");
     }
     auto bind_ip = args["-b"].asString();
-    auto bind_ip_request = loop->resource<uvw::GetAddrInfoReq>();
-    auto bind_ip_resolved = bind_ip_request->addrInfoSync(bind_ip, "0");
+    auto bind_ip_request = loop->resource<uvw::get_addr_info_req>();
+    auto bind_ip_resolved = bind_ip_request->addr_info_sync(bind_ip, "0");
     if (!bind_ip_resolved.first) {
         std::cerr << "unable to resolve bind ip address: " << bind_ip << std::endl;
         return 1;
     }
+    flame::socket_address bind_addr(*bind_ip_resolved.second->ai_addr, bind_ip_resolved.second->ai_addrlen);
 
     std::vector<std::string> raw_target_list;
     if (args["TARGET"].asString() == "file" && args["--targets"]) {
@@ -312,22 +304,21 @@ int main(int argc, char *argv[])
     }
 
     std::vector<Target> target_list;
-    auto request = loop->resource<uvw::GetAddrInfoReq>();
+    auto request = loop->resource<uvw::get_addr_info_req>();
     for (uint i = 0; i < raw_target_list.size(); i++) {
-        uvw::Addr addr;
-        struct http_parser_url parsed = {};
+        struct urlparse_url parsed = {};
         std::string url = raw_target_list[i];
-        if(url.rfind("https://", 0) != 0) {
+        if (url.rfind("https://", 0) != 0) {
             url.insert(0, "https://");
         }
-        int ret = http_parser_parse_url(url.c_str(), strlen(url.c_str()), 0, &parsed);
-        if(ret != 0) {
+        int ret = urlparse_parse_url(url.c_str(), strlen(url.c_str()), 0, &parsed);
+        if (ret != 0) {
             std::cerr << "could not parse url: " << url << std::endl;
             return 1;
         }
-        std::string authority(&url[parsed.field_data[UF_HOST].off], parsed.field_data[UF_HOST].len);
+        std::string authority(&url[parsed.field_data[URLPARSE_HOST].off], parsed.field_data[URLPARSE_HOST].len);
 
-        auto target_resolved = request->addrInfoSync(authority, args["-p"].asString());
+        auto target_resolved = request->addr_info_sync(authority, args["-p"].asString());
         if (!target_resolved.first) {
             std::cerr << "unable to resolve target address: " << authority << std::endl;
             if (raw_target_list[i] == "file") {
@@ -344,12 +335,8 @@ int main(int argc, char *argv[])
             return 1;
         }
 
-        if (family == AF_INET) {
-            addr = uvw::details::address<uvw::IPv4>((struct sockaddr_in *)node->ai_addr);
-        } else if (family == AF_INET6) {
-            addr = uvw::details::address<uvw::IPv6>((struct sockaddr_in6 *)node->ai_addr);
-        }
-        target_list.push_back({&parsed, addr.ip, url});
+        flame::socket_address addr(*node->ai_addr, node->ai_addrlen);
+        target_list.push_back({parsed, addr, url});
     }
 
     long want_r_limit = args["-Q"].asLong();
@@ -427,8 +414,7 @@ int main(int argc, char *argv[])
 
     auto traf_config = std::make_shared<TrafGenConfig>();
     traf_config->batch_count = b_count;
-    traf_config->family = family;
-    traf_config->bind_ip = bind_ip;
+    traf_config->bind_addr = bind_addr;
     traf_config->target_list = target_list;
     traf_config->port = static_cast<unsigned int>(args["-p"].asLong());
     traf_config->s_delay = s_delay;
@@ -484,45 +470,45 @@ int main(int argc, char *argv[])
         }
     };
 
-    auto stop_traffic = [&](uvw::SignalEvent &, uvw::SignalHandle &) {
+    auto stop_traffic = [&](uvw::signal_event &, uvw::signal_handle &) {
         shutdown();
     };
 
     if (runtime_limit != 0) {
-        run_timer = loop->resource<uvw::TimerHandle>();
-        run_timer->on<uvw::TimerEvent>([&shutdown](const auto &, auto &) { shutdown(); });
-        run_timer->start(uvw::TimerHandle::Time{runtime_limit * 1000}, uvw::TimerHandle::Time{0});
+        run_timer = loop->resource<uvw::timer_handle>();
+        run_timer->on<uvw::timer_event>([&shutdown](const auto &, auto &) { shutdown(); });
+        run_timer->start(uvw::timer_handle::time{runtime_limit * 1000}, uvw::timer_handle::time{0});
     }
 
     if (qgen->loops()) {
-        qgen_loop_timer = loop->resource<uvw::TimerHandle>();
-        qgen_loop_timer->on<uvw::TimerEvent>([&qgen, &shutdown](const auto &, auto &) {
+        qgen_loop_timer = loop->resource<uvw::timer_handle>();
+        qgen_loop_timer->on<uvw::timer_event>([&qgen, &shutdown](const auto &, auto &) {
             if (qgen->finished()) {
                 shutdown();
             } });
-        qgen_loop_timer->start(uvw::TimerHandle::Time{500}, uvw::TimerHandle::Time{500});
+        qgen_loop_timer->start(uvw::timer_handle::time{500}, uvw::timer_handle::time{500});
     }
 
-    sigint->on<uvw::SignalEvent>(stop_traffic);
+    sigint->on<uvw::signal_event>(stop_traffic);
     sigint->start(SIGINT);
 
-    sigterm->on<uvw::SignalEvent>(stop_traffic);
+    sigterm->on<uvw::signal_event>(stop_traffic);
     sigterm->start(SIGTERM);
 
     if (config->verbosity()) {
-        std::cout << "binding traffic generators to " << traf_config->bind_ip << std::endl;
+        std::cout << "binding traffic generators to " << traf_config->bind_addr.ip_str() << std::endl;
         std::cout << "flaming target(s) [";
         for (uint i = 0; i < 3; i++) {
-            std::cout << traf_config->target_list[i].address;
-            if (i == traf_config->target_list.size()-1) {
+            // FIXME
+            // std::cout << traf_config->target_list[i].address;
+            if (i == traf_config->target_list.size() - 1) {
                 break;
-            }
-            else {
+            } else {
                 std::cout << ", ";
             }
         }
         if (traf_config->target_list.size() > 3) {
-            std::cout << "and " << traf_config->target_list.size()-3 << " more";
+            std::cout << "and " << traf_config->target_list.size() - 3 << " more";
         }
         std::cout << "] on port "
                   << args["-p"].asLong()
@@ -534,8 +520,7 @@ int main(int argc, char *argv[])
             std::cout << "query list randomized" << std::endl;
         }
         if (config->rate_limit()) {
-            std::cout << "rate limit @ " << config->rate_limit() << " QPS (" << config->rate_limit() / static_cast<double>(c_count) <<
-            " QPS per concurrent sender)" << std::endl;
+            std::cout << "rate limit @ " << config->rate_limit() << " QPS (" << config->rate_limit() / static_cast<double>(c_count) << " QPS per concurrent sender)" << std::endl;
         }
     }
 
