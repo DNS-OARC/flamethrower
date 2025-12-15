@@ -1,19 +1,14 @@
-Flamethrower 
-============
+# Flamethrower
 
 A DNS performance and functional testing utility.
 
-2017-2022© NSONE, Inc.
-
-Overview
---------
+## Overview
 
 Flamethrower is a small, fast, configurable tool for functional testing, benchmarking, and stress testing DNS servers and networks. It supports IPv4, IPv6, UDP, TCP, DoT, and DoH and has a modular system for generating queries used in the tests.
 
 Originally built as an alternative to [dnsperf](https://github.com/DNS-OARC/dnsperf), many of the command line options are compatible.
 
-Getting Started
----------------
+## Getting Started
 
 The easiest way to get started with Flamethrower is to use the [public docker image](https://hub.docker.com/repository/docker/ns1labs/flame):
 ```
@@ -21,11 +16,9 @@ docker pull ns1labs/flame
 docker run ns1labs/flame --help
 ```
 
-There are currently no prebuilt operating system packages. If you would like to build your own executable,
-please see the Build section below.
+There are currently no prebuilt operating system packages. If you would like to build your own executable, please see the Build section below.
 
-Usage
------
+## Usage
 
 Current command line options are described with:
 
@@ -33,8 +26,7 @@ Current command line options are described with:
 flame --help
 ```
 
-Quick Examples
---------
+## Quick Examples
 
 Flame localhost port 53, UDP, maximum speed:
 ```
@@ -71,8 +63,7 @@ Flame multiple target at once, reading the list from a file:
 flame file --targets myresolvers.txt
 ```
 
-Detailed Features
------------------
+## Detailed Features
 
 ### Query Generators
 
@@ -100,55 +91,58 @@ Detailed Features
 
  There is currently no built-in support for multiprocess sending, so the maximum throughput will be reached once a single CPU is saturated. However, you may manually start several concurrent `flame` processes, including up to 1 per CPU available. There is future planned support for builtin multiprocess sending.
 
-Build Dependencies
-------------------
+## Build Dependencies
 
-* CMake >= 3.8
-* Linux or OSX
-* libuv >= 1.30.0
-* libldns >= 1.7.0
-* gnutls >= 3.3
-* C++ compiler supporting C++17
+* Linux or macOS
+* C++ compiler supporting C++20
+* Meson Build System
+* Ninja
+* pkgconf
 
-Optional DoH support requires:
-* nghttp2
+* libuv
+* libldns
+* gnutls
+* nghttp2 (optional for DNS-over-HTTPS support)
 
-Optional dependencies:
-* docopt
-* nlohmann-json >= 3.7.3
-* cpp-httplib
-* uvw >= 1.18.0
+To insta
 
-Building
---------
+## Building
 
-Building is based on CMake.
+Start by installing build requirements. On Fedora, run:
 
-Default build:
 ```
-mkdir build; cd build
-cmake ..
-make
+dnf install gcc g++ meson pkgconf ninja-build ldns-devel libuv-devel gnutls-devel libnghttp2-devel
 ```
 
-To build with DoH support:
+Go to the checked-out repository and run:
+
 ```
-mkdir build; cd build
-cmake -DDOH_ENABLE=ON ..
-make
+meson setup build
+cd build
+ninja
 ```
 
-Building the docker image:
+The DNS-over-HTTPS support will be enabled if libnghttp2 is detected. To explicity build with or without DoH support, use:
+
 ```
-docker build . --tag ns1labs/flame --file Dockerfile
+meson setup -Ddoh=false build
+```
+
+To build the docker image, run:
+
+```
+docker build -t ns1labs/flame .
 docker run --rm --net host ns1labs/flame --help
 ```
 
-Contributions
----
-Pull Requests and issues are welcome. See the [NS1 Contribution Guidelines](https://github.com/ns1/community) for more information.
+## Contributions
 
-License
--------
+Pull Requests and issues are welcome.
+
+## License
+
 This code is released under Apache License 2.0. You can find terms and conditions in the LICENSE file.
 
+Copyright 2017-2022 NSONE, Inc.
+
+Copyright 2025 Flamethrower Contributors
