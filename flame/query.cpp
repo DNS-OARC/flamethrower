@@ -78,6 +78,10 @@ ldns_rr_type QueryGenerator::cvt_qtype(const std::string &t)
         qtype = LDNS_RR_TYPE_DS;
     } else if (qt == "RP") {
         qtype = LDNS_RR_TYPE_RP;
+    } else if (qt == "SVCB") {
+        qtype = LDNS_RR_TYPE_SVCB;
+    } else if (qt == "HTTPS") {
+        qtype = LDNS_RR_TYPE_HTTPS;
     } else {
         throw std::runtime_error("unimplemented QTYPE: [" + qt + "]");
     }
@@ -511,7 +515,7 @@ void RandomLabelQueryGenerator::init()
     int max_len{10};
 
     // random qtypes
-    std::vector<std::string> r_qtypes = {"A", "AAAA", "NS", "CNAME", "MX", "TXT", "PTR", "SOA"};
+    std::vector<std::string> r_qtypes = {"A", "AAAA", "NS", "CNAME", "MX", "TXT", "PTR", "SOA", "HTTPS"};
 
     // label count
     int min_lbl{1};
