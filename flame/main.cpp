@@ -1,4 +1,5 @@
-// Copyright 2017 NSONE, Inc
+// Copyright 2017-2022 NSONE, Inc
+// Copyright 2025 Flamethrower Contributors
 
 #include <iostream>
 #include <map>

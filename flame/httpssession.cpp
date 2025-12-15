@@ -1,3 +1,6 @@
+// Copyright 2020 NSONE, Inc
+// Copyright 2025 Flamethrower Contributors
+
 #include <algorithm>
 #include <cstring>
 #include <iostream>

@@ -1,9 +1,9 @@
-#ifndef FLAMETHROWER_HTTP_H
-#define FLAMETHROWER_HTTP_H
+// Copyright 2020 NSONE, Inc
+// Copyright 2025 Flamethrower Contributors
+
+#pragma once
 
 enum class HTTPMethod {
     POST,
     GET,
 };
-
-#endif // FLAMETHROWER_HTTP_H

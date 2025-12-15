@@ -1,3 +1,6 @@
+// Copyright 2019 NSONE, Inc
+// Copyright 2025 Flamethrower Contributors
+
 #pragma once
 
 #include <functional>
