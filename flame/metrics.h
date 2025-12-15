@@ -14,8 +14,7 @@
 
 class Metrics;
 
-class MetricsMgr
-{
+class MetricsMgr {
     std::chrono::high_resolution_clock::time_point _start_time;
     std::chrono::high_resolution_clock::time_point _stop_time;
 
@@ -116,8 +115,7 @@ public:
     std::shared_ptr<Metrics> create_trafgen_metrics();
 };
 
-class Metrics
-{
+class Metrics {
     friend class MetricsMgr;
 
     std::shared_ptr<uvw::loop> _loop;

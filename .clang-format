@@ -1,40 +1,34 @@
 ---
 Language: Cpp
+Standard: c++20
 
-# defaults (if not documented) can be found here: 
-#  https://github.com/llvm-mirror/clang/blob/master/lib/Format/Format.cpp
+# Our coding style is based on WebKit with some Linux coding style overrides.
 BasedOnStyle: WebKit
 
-# make it look more Linuxy
-AllowShortFunctionsOnASingleLine: None
-PointerAlignment: Right
+# Line break after brace only in function definitions:
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterFunction: true
+  AfterNamespace: false
+  AfterClass: false
+  AfterControlStatement: false
+  AfterEnum: false
+  AfterObjCDeclaration: false
+  AfterStruct: false
+  AfterUnion: false
+  BeforeCatch: false
+  BeforeElse: false
+  IndentBraces: false
 
-# custom brace breaks, but defaults based on "Linux" style.
-BreakBeforeBraces: 'Custom'
-BraceWrapping: {
-    AfterClass: 'true'       # linux default
-    AfterFunction: 'true'    # linux default
-    AfterNamespace: 'false'  # non-linux
-    # everything else is same default as linux style.
-    AfterControlStatement: 'false'
-    AfterEnum: 'false'
-    AfterObjCDeclaration: 'false'
-    AfterStruct: 'false'
-    AfterUnion: 'false'
-    BeforeCatch: 'false'
-    BeforeElse: 'false'
-    IndentBraces: 'false'
-}
-
-AlignTrailingComments: true
-
-# had to re-set this after changing BraceWrapping. WebKit default is 0.
+# Line breaks are not enforced:
 ColumnLimit: 0
 
-# don't inner (nested) namespaces.
-NamespaceIndentation: None
+AllowShortFunctionsOnASingleLine: None
 
-# modernize
-Standard: Cpp11
+PointerAlignment: Right
+
+NamespaceIndentation: None
 Cpp11BracedListStyle: true
 SpaceBeforeCpp11BracedList: false
+
+AlignTrailingComments: true

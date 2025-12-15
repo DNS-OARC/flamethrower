@@ -4,8 +4,7 @@
 
 #include "tcpsession.h"
 
-class TCPTLSSession : public TCPSession
-{
+class TCPTLSSession : public TCPSession {
 public:
     using handshake_error_cb = std::function<void()>;
 

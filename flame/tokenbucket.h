@@ -4,8 +4,7 @@
 #include <chrono>
 #include <uvw.hpp>
 
-class TokenBucket
-{
+class TokenBucket {
 public:
     TokenBucket()
         : _rate_qps(0)

@@ -15,15 +15,13 @@ namespace flame {
 /**
  * socket_address is similar to sockaddr_storage but it can hold only AF_INET or AF_INET6 address.
  */
-class socket_address
-{
+class socket_address {
     union {
         sockaddr_in ipv4;
         sockaddr_in6 ipv6;
     } _addr;
 
-    class unsupported_family : std::invalid_argument
-    {
+    class unsupported_family : std::invalid_argument {
     public:
         unsupported_family()
             : std::invalid_argument("unsupported address family")

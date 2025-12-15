@@ -5,8 +5,7 @@
 
 #include <uvw.hpp>
 
-class TCPSession
-{
+class TCPSession {
 public:
     using malformed_data_cb = std::function<void()>;
     using got_dns_msg_cb = std::function<void(std::unique_ptr<char[]> data, size_t size)>;

@@ -23,16 +23,14 @@ enum class GeneratorArgFmt {
     KEYVAL,
 };
 
-class Query
-{
+class Query {
 public:
     // XXX ip we send query to, so we can track mismatched ips
     // XXX qname we sent to ^
     std::chrono::high_resolution_clock::time_point send_time;
 };
 
-class QueryGenerator
-{
+class QueryGenerator {
 public:
     using WireTpt = std::pair<uint8_t *, size_t>;
 
@@ -139,8 +137,7 @@ public:
     void randomize();
 };
 
-class StaticQueryGenerator : public QueryGenerator
-{
+class StaticQueryGenerator : public QueryGenerator {
 
 public:
     StaticQueryGenerator(std::shared_ptr<Config> c)
@@ -159,8 +156,7 @@ public:
     }
 };
 
-class FileQueryGenerator : public QueryGenerator
-{
+class FileQueryGenerator : public QueryGenerator {
 
 public:
     FileQueryGenerator(std::shared_ptr<Config> c,
@@ -180,8 +176,7 @@ public:
     }
 };
 
-class RandomPktQueryGenerator : public QueryGenerator
-{
+class RandomPktQueryGenerator : public QueryGenerator {
 
 public:
     RandomPktQueryGenerator(std::shared_ptr<Config> c)
@@ -199,8 +194,7 @@ public:
     }
 };
 
-class RandomQNameQueryGenerator : public QueryGenerator
-{
+class RandomQNameQueryGenerator : public QueryGenerator {
 
 public:
     RandomQNameQueryGenerator(std::shared_ptr<Config> c)
@@ -218,8 +212,7 @@ public:
     }
 };
 
-class RandomLabelQueryGenerator : public QueryGenerator
-{
+class RandomLabelQueryGenerator : public QueryGenerator {
 
 public:
     RandomLabelQueryGenerator(std::shared_ptr<Config> c)
@@ -237,8 +230,7 @@ public:
     }
 };
 
-class NumberNameQueryGenerator : public QueryGenerator
-{
+class NumberNameQueryGenerator : public QueryGenerator {
 
     std::mt19937_64 _generator;
     std::uniform_int_distribution<> _namedist;

@@ -35,8 +35,7 @@ enum STATE_HTTP2 {
     SENDING_DATA
 };
 
-class HTTPSSession : public TCPSession
-{
+class HTTPSSession : public TCPSession {
 public:
     using log_send_cb = std::function<void(int32_t id)>;
     using handshake_error_cb = std::function<void()>;

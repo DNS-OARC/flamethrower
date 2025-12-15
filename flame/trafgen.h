@@ -53,8 +53,7 @@ struct TrafGenConfig {
     }
 };
 
-class TrafGen
-{
+class TrafGen {
 
     std::shared_ptr<uvw::loop> _loop;
     std::shared_ptr<Metrics> _metrics;

@@ -4,8 +4,7 @@
 
 #include <string>
 
-class Config
-{
+class Config {
 private:
     std::string _output_file;
     int _verbosity{1};
