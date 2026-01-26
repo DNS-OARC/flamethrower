@@ -1,1 +1,2 @@
 option('doh', type: 'boolean', value: true, description: 'Enable DNS-over-HTTPS support.')
+option('bundles', type: 'boolean', value: true, description: 'Enable usage of 3rd party bundled libraries.')
