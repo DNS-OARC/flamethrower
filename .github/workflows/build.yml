@@ -21,7 +21,7 @@ jobs:
       - name: Install build requirements
         if: matrix.os == 'ubuntu-latest'
         run: |
-          sudo apt-get install --yes --no-install-recommends g++ meson ninja-build libuv1-dev libldns-dev libnghttp2-dev libgnutls30-dev pkgconf
+          sudo apt-get install --yes --no-install-recommends g++ meson ninja-build libuv1-dev libldns-dev libnghttp2-dev gnutls-dev pkgconf
 
       - name: Setup Meson Build
         shell: bash
