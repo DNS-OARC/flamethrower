@@ -104,8 +104,6 @@ flame file --targets myresolvers.txt
 * gnutls
 * nghttp2 (optional for DNS-over-HTTPS support)
 
-To insta
-
 ## Building
 
 Start by installing build requirements. On Fedora, run:
