@@ -3,10 +3,11 @@ name: Build
 on:
   pull_request:
     branches:
-      - master
+      - main
   push:
     branches:
-      - master
+      - main
+  workflow_dispatch:
 
 jobs:
   build:
@@ -21,12 +22,25 @@ jobs:
       - name: Install build requirements
         if: matrix.os == 'ubuntu-latest'
         run: |
-          sudo apt-get install --yes --no-install-recommends g++ meson ninja-build libuv1-dev libldns-dev libnghttp2-dev libgnutls30-dev pkgconf
+          sudo apt-get install --yes --no-install-recommends g++ ninja-build libuv1-dev libldns-dev libnghttp2-dev gnutls-dev pkgconf python3-pip python3.12-venv
+
+      # Ubuntu 24.04's meson package doesn't support c23, so we instal it via
+      # pip in a Python virtual environment.
+      - name: Setup Python virtual environment and install Meson
+        shell: bash
+        run: |
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip3 install meson
 
       - name: Setup Meson Build
         shell: bash
-        run: meson setup ${{github.workspace}}/build
+        run: |
+          source .venv/bin/activate
+          meson setup ${{github.workspace}}/build
 
       - name: Build
         shell: bash
-        run: ninja -C ${{github.workspace}}/build
+        run: |
+          source .venv/bin/activate
+          ninja -C ${{github.workspace}}/build
