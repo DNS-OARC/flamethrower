@@ -16,6 +16,9 @@ nghttp2 = dependency('libnghttp2', 'nghttp2', required: get_option('doh'))
 
 # bundled libraries
 
+uvw = dependency('uvw', required: not get_option('bundles'))
+
+if not uvw.found()
 uvw_sources = files(
   '3rd/uvw/src/async.cpp',
   '3rd/uvw/src/check.cpp',
@@ -58,14 +61,23 @@ uvw = declare_dependency(
   compile_args: ['-DUVW_AS_LIB', '-iquote', meson.current_source_dir() / '3rd/uvw/include/uvw'],
   include_directories: uvw_includes,
 )
+endif
 
+json = dependency('json', 'nlohmann_json', required: not get_option('bundles'))
+
+if not json.found()
 json = declare_dependency(
   include_directories: include_directories('3rd/json/include'),
 )
+endif
 
+httplib = dependency('cpp-httplib', 'httplib', required: not get_option('bundles'))
+
+if not httplib.found()
 httplib = declare_dependency(
   include_directories: include_directories('3rd/cpp-httplib/include'),
 )
+endif
 
 urlparse_sources = files(
   '3rd/urlparse/src/urlparse.c',
@@ -105,6 +117,9 @@ base64 = declare_dependency(
   include_directories: base64_includes,
 )
 
+docopt = dependency('docopt', required: not get_option('bundles'))
+
+if not docopt.found()
 docopt_includes = include_directories(
   '3rd/docopt.cpp/include',
 )
@@ -123,6 +138,7 @@ docopt = declare_dependency(
   link_with: [docopt_library],
   include_directories: docopt_includes,
 )
+endif
 
 # x
 
