@@ -104,14 +104,21 @@ flame file --targets myresolvers.txt
 * gnutls
 * nghttp2 (optional for DNS-over-HTTPS support)
 
-To insta
-
 ## Building
 
 Start by installing build requirements. On Fedora, run:
 
 ```
 dnf install gcc g++ meson pkgconf ninja-build ldns-devel libuv-devel gnutls-devel libnghttp2-devel
+```
+
+On Ubuntu 24.04 LTS, the system meson package doesn't support C23, and so installing meson via pip is the easiest path. Run:
+
+```
+apt-get install g++ ninja-build libuv1-dev libldns-dev libnghttp2-dev gnutls-dev pkgconf python3-pip python3.12-venv
+python3 -m venv .venv
+source .venv bin/activate
+pip3 install meson
 ```
 
 Go to the checked-out repository and run:
