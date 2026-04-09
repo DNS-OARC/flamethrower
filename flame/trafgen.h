@@ -15,21 +15,14 @@
 
 #include "addr.h"
 #include "metrics.h"
+#include "protocol.h"
+#include "proxy.h"
 #include "query.h"
 #include "target.h"
 #include "tcpsession.h"
 #include "tokenbucket.h"
 
 #include <uvw.hpp>
-
-enum class Protocol {
-    UDP,
-    TCP,
-#ifdef DOH_ENABLE
-    DOH,
-#endif
-    DOT,
-};
 
 struct TrafGenConfig {
     std::vector<Target> target_list;
@@ -40,6 +33,7 @@ struct TrafGenConfig {
     long s_delay{1};
     long batch_count{10};
     Protocol protocol{Protocol::UDP};
+    ProxyInfo proxy_info;
 #ifdef DOH_ENABLE
     HTTPMethod method{HTTPMethod::POST};
 #endif
@@ -75,6 +69,9 @@ class TrafGen {
     std::unordered_map<uint16_t, Query> _in_flight;
     // a randomized list of query ids that are not currently in flight
     std::vector<uint16_t> _free_id_list;
+
+    // cached PROXY v2 header, empty when proxy is disabled
+    std::vector<char> _cached_proxy_header;
 
     bool _started_sending;
     bool _stopping;

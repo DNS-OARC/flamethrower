@@ -130,6 +130,9 @@ flame_sources = files(
   'flame/addr.cpp',
   'flame/metrics.cpp',
   'flame/metrics.h',
+  'flame/protocol.h',
+  'flame/proxy.cpp',
+  'flame/proxy.h',
   'flame/query.cpp',
   'flame/query.h',
   'flame/target.h',
@@ -182,3 +185,19 @@ flame = executable(
   include_directories: include_directories('flame'),
   install: true,
 )
+
+# tests
+
+test_proxy_args = []
+if get_option('doh')
+  test_proxy_args += ['-DDOH_ENABLE']
+endif
+
+test_proxy = executable(
+  'test_proxy',
+  files('tests/test_proxy.cpp', 'flame/proxy.cpp', 'flame/utils.cpp'),
+  cpp_args: test_proxy_args,
+  include_directories: include_directories('flame'),
+)
+
+test('proxy_protocol_v2', test_proxy)

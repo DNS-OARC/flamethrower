@@ -3,11 +3,13 @@
 #include "trafgen.h"
 
 #include <algorithm>
+#include <cstring>
 #include <iostream>
 #include <memory>
 #include <netinet/in.h>
 #include <random>
 
+#include "proxy.h"
 #include "tcp.h"
 #include "tcptlssession.h"
 
@@ -250,6 +252,13 @@ void TrafGen::connect_tcp_events()
 
     // SOCKET: on connect
     _tcp_handle->on<uvw::connect_event>([this](uvw::connect_event &, uvw::tcp_handle &) {
+        // Send PROXY v2 header at TCP level before any session handshake
+        if (!_cached_proxy_header.empty()) {
+            auto data = std::make_unique<char[]>(_cached_proxy_header.size());
+            memcpy(data.get(), _cached_proxy_header.data(), _cached_proxy_header.size());
+            _tcp_handle->write(std::move(data), _cached_proxy_header.size());
+        }
+
         _tcp_session->on_connect_event();
         _metrics->tcp_connection();
 
@@ -312,14 +321,30 @@ void TrafGen::udp_send()
         _free_id_list.pop_back();
         assert(_in_flight.find(id) == _in_flight.end());
         auto qt = _qgen->next_udp(id);
-        _udp_handle->send(_traf_config->next_target().address, std::move(std::get<0>(qt)), std::get<1>(qt));
-        _metrics->send(std::get<1>(qt), 1, _in_flight.size());
+
+        std::unique_ptr<char[]> data_to_send = std::move(std::get<0>(qt));
+        size_t data_len = std::get<1>(qt);
+
+        if (!_cached_proxy_header.empty()) {
+            size_t new_len = _cached_proxy_header.size() + data_len;
+            auto new_data = std::make_unique<char[]>(new_len);
+            memcpy(new_data.get(), _cached_proxy_header.data(), _cached_proxy_header.size());
+            memcpy(new_data.get() + _cached_proxy_header.size(), data_to_send.get(), data_len);
+            data_to_send = std::move(new_data);
+            data_len = new_len;
+        }
+
+        _udp_handle->send(_traf_config->next_target().address, std::move(data_to_send), data_len);
+        _metrics->send(data_len, 1, _in_flight.size());
         _in_flight[id].send_time = std::chrono::high_resolution_clock::now();
     }
 }
 
 void TrafGen::start()
 {
+    if (_traf_config->proxy_info.enabled) {
+        _cached_proxy_header = generate_proxy_v2_header(_traf_config->proxy_info, _traf_config->protocol);
+    }
 
     if (_traf_config->protocol == Protocol::UDP) {
         start_udp();

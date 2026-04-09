@@ -13,6 +13,7 @@
 #include "docopt.h"
 #include "http.h"
 #include "metrics.h"
+#include "proxy.h"
 #include "query.h"
 #include "trafgen.h"
 #include "utils.h"
@@ -29,7 +30,7 @@ static const char USAGE[] =
       flame [-b BIND_IP] [-q QCOUNT] [-c TCOUNT] [-p PORT] [-d DELAY_MS] [-r RECORD] [-T QTYPE]
             [-o FILE] [-l LIMIT_SECS] [-t TIMEOUT] [-F FAMILY] [-f FILE] [-n LOOP] [-P PROTOCOL] [-M HTTPMETHOD]
             [-Q QPS] [-g GENERATOR] [-v VERBOSITY] [-R] [--class CLASS] [--qps-flow SPEC]
-            [--dnssec] [--targets FILE] [--http-srv PORT]
+            [--dnssec] [--targets FILE] [--http-srv PORT] [--proxy PROXY_SPEC]
             TARGET [GENOPTS]...
       flame (-h | --help)
       flame --version
@@ -67,6 +68,7 @@ static const char USAGE[] =
       -R               Randomize the query list before sending [default: false]
       --targets FILE   Get the list of TARGETs from the given file, one line per host or IP
       --dnssec         Set DO flag in EDNS
+      --proxy PROXY_SPEC  Prepend a PROXY v2 header. Format: SRC_ADDR[#SRC_PORT]-DST_ADDR[#DST_PORT] (use [addr] for IPv6)
 
      Generators:
 
@@ -424,6 +426,18 @@ int main(int argc, char *argv[])
     traf_config->method = method;
 #endif
     traf_config->r_timeout = args["-t"].asLong();
+
+    if (args["--proxy"]) {
+        try {
+            traf_config->proxy_info = parse_proxy_spec(args["--proxy"].asString(), AF_UNSPEC);
+            if (config->verbosity()) {
+                std::cout << "PROXY v2 header enabled" << std::endl;
+            }
+        } catch (const std::runtime_error &e) {
+            std::cerr << "proxy spec error: " << e.what() << std::endl;
+            return 1;
+        }
+    }
 
     std::vector<std::shared_ptr<TrafGen>> throwers;
     for (auto i = 0; i < c_count; i++) {

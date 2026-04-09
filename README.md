@@ -63,6 +63,16 @@ Flame multiple target at once, reading the list from a file:
 flame file --targets myresolvers.txt
 ```
 
+Flame target with a PROXY protocol v2 header (e.g. testing through a proxy like dnsdist or HAProxy):
+```
+flame --proxy 192.168.1.100#4321-10.0.0.1#53 target.test.com
+```
+
+Same with IPv6 addresses (wrap in brackets):
+```
+flame -F inet6 --proxy [2001:db8::1]#4321-[2001:db8::2]#53 target.test.com
+```
+
 ## Detailed Features
 
 ### Query Generators
@@ -82,6 +92,14 @@ flame file --targets myresolvers.txt
 ### Output Metrics
 
  Flamethrower can generate detailed metrics for each of its concurrent senders. Metrics include send and receive counts, timeouts, min, max and average latency, errors, and the like. The output format is JSON, and is suitable for ingestion into databases such as Elastic for further processing or visualization. See the `-o` flag.
+
+### PROXY Protocol v2
+
+ Flamethrower can prepend a [PROXY protocol v2](https://www.haproxy.org/download/2.9/doc/proxy-protocol.txt) (PPv2) header to DNS queries. This is useful for testing DNS servers behind proxies (e.g. dnsdist, HAProxy) that use PPv2 to convey original client address information.
+
+ Use `--proxy SRC_ADDR[#SRC_PORT]-DST_ADDR[#DST_PORT]` to specify the source and destination addresses encoded in the header. For IPv6, wrap addresses in brackets: `[addr]`. Ports are optional and default to 0.
+
+ The PPv2 header is prepended per-datagram for UDP and sent once at connection establishment for TCP/DoT/DoH.
 
 ### Concurrency
 
