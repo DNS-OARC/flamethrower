@@ -117,7 +117,7 @@ On Ubuntu 24.04 LTS, the system meson package doesn't support C23, and so instal
 ```
 apt-get install g++ ninja-build libuv1-dev libldns-dev libnghttp2-dev gnutls-dev pkgconf python3-pip python3.12-venv
 python3 -m venv .venv
-source .venv bin/activate
+source .venv/bin/activate
 pip3 install meson
 ```
 
