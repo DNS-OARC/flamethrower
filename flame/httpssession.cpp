@@ -122,7 +122,6 @@ static int on_stream_close_callback(nghttp2_session *session, int32_t stream_id,
         std::cerr << "No stream data on stream close" << std::endl;
         return 0;
     }
-    nghttp2_session_terminate_session(session, NGHTTP2_NO_ERROR);
     return 0;
 }
 
