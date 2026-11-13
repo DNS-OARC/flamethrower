@@ -115,13 +115,10 @@ static int on_data_chunk_recv_callback(nghttp2_session *session, uint8_t flags [
     return 0;
 }
 
-static int on_stream_close_callback(nghttp2_session *session, int32_t stream_id, uint32_t error_code [[maybe_unused]], void *user_data [[maybe_unused]])
+static int on_stream_close_callback(nghttp2_session *, int32_t stream_id, uint32_t error_code [[maybe_unused]], void *user_data [[maybe_unused]])
 {
-    auto stream_data = static_cast<http2_stream_data *>(nghttp2_session_get_stream_user_data(session, stream_id));
-    if (!stream_data) {
-        std::cerr << "No stream data on stream close" << std::endl;
-        return 0;
-    }
+    auto class_session = static_cast<HTTPSSession *>(user_data);
+    class_session->_recv_chunks.erase(stream_id);
     return 0;
 }
 
